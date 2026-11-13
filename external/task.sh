@@ -19,6 +19,12 @@ readonly CMD_TASK="$1"
 readonly DIR_TASK="$( cd "$( dirname "$0" )" >/dev/null && pwd )"
 if [ -n "$CMD_TASK" ]; then shift; fi
 
+# The tor release external/tor must be at. Checked after every `git submodule update`, which
+# resets the submodule to the commit in the index: a tor bump that isn't staged (or committed)
+# fails here, instead of silently building the old tor. Update together with the submodule.
+readonly TOR_TAG="tor-0.4.9.16"
+readonly TOR_COMMIT="c51547ca15ea665950dd154e160051c57f5719db"
+
 function build:all { ## Builds all targets
   build:all:desktop
   build:all:mobile
@@ -696,6 +702,18 @@ function validate:all:update_hashes { ## Updates gradle extensions with new hash
   validate:all
 }
 
+function __require:tor:commit {
+  local commit=
+  commit="$(${GIT} -C "$DIR_TASK/tor" rev-parse HEAD)"
+  if [ "$commit" = "$TOR_COMMIT" ]; then return 0; fi
+
+  __util:error "external/tor is at $commit, expected $TOR_TAG ($TOR_COMMIT)
+
+    git submodule update checks out the commit recorded in the index. If you moved
+    external/tor, stage it first (git add external/tor). If you meant to bump tor,
+    update TOR_TAG and TOR_COMMIT in $DIR_TASK/task.sh"
+}
+
 # Run
 if [ -z "$CMD_TASK" ] || [ "$CMD_TASK" = "help" ] || echo "$CMD_TASK" | grep -q "^__"; then
   help
@@ -717,6 +735,7 @@ else
     __util:require:cmd "$GIT" "git"
 
     ${GIT} submodule update --init
+    __require:tor:commit
 
     __util:require:no_build_lock
     trap '__build:cleanup' EXIT
@@ -737,6 +756,7 @@ else
     __util:require:cmd "$GIT" "git"
 
     ${GIT} submodule update --init "$DIR_TASK/tor"
+    __require:tor:commit
     __util:git:clean "tor"
 
     __util:require:no_build_lock

@@ -1,388 +1,50 @@
 name: CI
 
-on: [ pull_request ]
-
-env:
-  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dkotlin.incremental=false -Dorg.gradle.jvmargs="-XX:+HeapDumpOnOutOfMemoryError -XX:MetaspaceSize=1g"
+on:
+  workflow_dispatch:
+  push:
 
 jobs:
-  compile-task:
-    strategy:
-      fail-fast: false
-      matrix:
-        task-target: [ geoip, android, ios, linux-libc, linux-musl, macos, mingw ]
+  linux-libc-x86_64:
     runs-on: ubuntu-latest
-    outputs:
-      id-geoip: ${{ steps.output-artifact-id.outputs.id-geoip }}
-      id-android: ${{ steps.output-artifact-id.outputs.id-android }}
-      id-ios: ${{ steps.output-artifact-id.outputs.id-ios }}
-      id-linux-libc: ${{ steps.output-artifact-id.outputs.id-linux-libc }}
-      id-linux-musl: ${{ steps.output-artifact-id.outputs.id-linux-musl }}
-      id-macos: ${{ steps.output-artifact-id.outputs.id-macos }}
-      id-mingw: ${{ steps.output-artifact-id.outputs.id-mingw }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OUT: external/build/out/tor-gpl/linux-libc/x86_64
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ResourceValidation extensions have expected sha256 hashes for all
-      # external resources and/or libs. Hash the .kt files and use as a
-      # key in order to restore artifacts if nothing has changed.
-      - name: Hash ResourceValidation Extensions
+      # The build-env images are pulled by the digests in build-env/digests.
+      - name: Log In To GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build
+        run: ./external/task.sh build:linux-libc:x86_64
+
+      - name: Record Hashes
         run: |
-          HASHES=""
-          cd "build-logic/src/main/kotlin/resource/validation/extensions"
-          for FILE in $(ls); do
-            if [ ! -f "$FILE" ]; then continue; fi
-            if [ "$FILE" = "AbstractResourceValidationExtension.kt" ]; then continue; fi
-            HASHES+="$(sha256sum "$FILE" | cut -d ' ' -f 1)"
-          done
-          COMBINED="$(echo "$HASHES" | sha256sum - | cut -d ' ' -f 1)"
-          echo "rv-hash=$COMBINED" >> "$GITHUB_ENV"
+          {
+            echo "### linux-libc x86_64 output"
+            echo '```'
+            (cd "$OUT" && sha256sum tor libtor.so)
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Check For Existing Artifact
-        run: |
-          ARTIFACT_ID=$(
-            curl -L \
-              -H "Accept: application/vnd.githubm+json" \
-              -H "Authorization: Bearer ${{ secrets.PAT_ACTION_READ }}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/05nelsonm/kmp-tor-resource/actions/artifacts?page=1&per_page=1&name=${{ env.rv-hash }}-${{ matrix.task-target }}" |
-              jq '.artifacts | .[0] | select(.expired==false) | .id'
-          )
-          echo "artifact-id=$ARTIFACT_ID" >> "$GITHUB_ENV"
+      - name: Check glibc
+        run: ./.github/workflows/glibc_check.sh 2.23 "$OUT/tor" "$OUT/libtor.so"
 
-      - name: Validate Gradle Wrapper
-        if: env.artifact-id == ''
-        uses: gradle/actions/wrapper-validation@v3
+      - name: Run tor --version On Ubuntu 20.04
+        run: docker run --rm -v "$GITHUB_WORKSPACE/$OUT:/tor:ro" ubuntu:20.04 /tor/tor --version
 
-      - name: Setup JDK
-        if: env.artifact-id == ''
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: 11
-
-      - name: Build Task Target
-        if: env.artifact-id == '' && matrix.task-target != 'geoip'
-        run: >
-          ./external/task.sh "build:all:${{ matrix.task-target }}"
-
-      - name: Package Task Target
-        if: env.artifact-id == ''
-        run: >
-          ./external/task.sh "package:${{ matrix.task-target }}"
-
-      - name: Tar Package Directory
-        if: env.artifact-id == ''
-        run: >
-          tar -czf ${{ matrix.task-target }}.tar.gz external/build/package
-
-      - name: Upload Artifact
-        if: env.artifact-id == ''
-        id: upload-artifact-step
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.rv-hash }}-${{ matrix.task-target }}
-          path: |
-            external/build/stage/*/*/*/logs/**
-            ${{ matrix.task-target }}.tar.gz
-          if-no-files-found: error
-          overwrite: false
-
-      - name: Set Artifact ID ENV
-        if: env.artifact-id == ''
-        run: >
-          echo "artifact-id=${{ steps.upload-artifact-step.outputs.artifact-id }}" >> "$GITHUB_ENV"
-
-      - name: Output Artifact ID
-        id: output-artifact-id
-        run: |
-          if [ -z "${{ env.artifact-id  }}" ]; then
-            echo "Environment Variable artifact-id is empty..."
-            exit 3
-          fi
-          echo "id-${{ matrix.task-target }}=${{ env.artifact-id }}" >> "$GITHUB_OUTPUT"
-
-  check:
-    needs: compile-task
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ macos-latest, macos-15-intel, ubuntu-latest, windows-latest ]
-        java-version: [ 11, 19 ]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v3
-
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: ${{ matrix.java-version }}
-
-      - name: Download Native Compilation Artifacts
-        shell: bash
-        run: |
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "geoip" "${{ needs.compile-task.outputs.id-geoip }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "android" "${{ needs.compile-task.outputs.id-android }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "ios" "${{ needs.compile-task.outputs.id-ios }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "linux-libc" "${{ needs.compile-task.outputs.id-linux-libc }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "linux-musl" "${{ needs.compile-task.outputs.id-linux-musl }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "macos" "${{ needs.compile-task.outputs.id-macos }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "mingw" "${{ needs.compile-task.outputs.id-mingw }}"
-
-      - name: Validate Native Compilations
-        shell: bash
-        run: |
-          VALIDATE_OUTPUT="$(./external/task.sh validate)"
-          if echo "$VALIDATE_OUTPUT" | grep "ERROR"; then exit 1; fi
-
-      - name: Check API Compatibility
-        if: matrix.os == 'macos-latest' && matrix.java-version == 19
-        run: >
-          ./gradlew apiCheck --stacktrace
-
-      - name: Run macOS [ aarch64 ] Tests [ Java 11 ]
-        if: matrix.os == 'macos-latest' && matrix.java-version == 11
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="JS,JVM,WASM_JS,WASM_WASI"
-
-      - name: Run macOS [ aarch64 ] Tests [ Java 19 ]
-        if: matrix.os == 'macos-latest' && matrix.java-version == 19
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="IOS_ARM64,IOS_X64,IOS_SIMULATOR_ARM64,JVM,MACOS_ARM64,MACOS_X64,TVOS_ARM64,TVOS_X64,TVOS_SIMULATOR_ARM64,WATCHOS_ARM32,WATCHOS_ARM64,WATCHOS_DEVICE_ARM64,WATCHOS_X64,WATCHOS_SIMULATOR_ARM64"
-
-      - name: Run macOS [ x86_64 ] Tests [ Java 11 ]
-        if: matrix.os == 'macos-15-intel' && matrix.java-version == 11
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="JS,JVM,WASM_JS,WASM_WASI"
-
-      - name: Run macOS [ x86_64 ] Tests [ Java 19 ]
-        if: matrix.os == 'macos-15-intel' && matrix.java-version == 19
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="IOS_ARM64,IOS_X64,IOS_SIMULATOR_ARM64,JVM,MACOS_ARM64,MACOS_X64,TVOS_ARM64,TVOS_X64,TVOS_SIMULATOR_ARM64,WATCHOS_ARM32,WATCHOS_ARM64,WATCHOS_DEVICE_ARM64,WATCHOS_X64,WATCHOS_SIMULATOR_ARM64"
-
-      - name: Run Linux Tests [ Java 11 ]
-        if: matrix.os == 'ubuntu-latest' && matrix.java-version == 11
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="JS,JVM,WASM_JS,WASM_WASI"
-
-      - name: Run Linux Tests [ Java 19 ]
-        if: matrix.os == 'ubuntu-latest' && matrix.java-version == 19
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="ANDROID,ANDROID_ARM32,ANDROID_ARM64,ANDROID_X64,ANDROID_X86,JVM,LINUX_ARM64,LINUX_X64"
-
-      - name: Run Windows Tests [ Java 11 ]
-        if: matrix.os == 'windows-latest' && matrix.java-version == 11
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="JS,JVM,WASM_JS,WASM_WASI"
-
-      - name: Run Windows Tests [ Java 19 ]
-        if: matrix.os == 'windows-latest' && matrix.java-version == 19
-        run: >
-          ./gradlew check --stacktrace
-          -PKMP_TARGETS="JVM,MINGW_X64"
-
-      - name: Upload Test Reports
-        uses: actions/upload-artifact@v4
+      - name: Upload Build Logs And Output
         if: always()
-        with:
-          name: test-report-${{ matrix.os }}-java${{ matrix.java-version }}
-          path: '**/build/reports/tests/**'
-          retention-days: 1
-
-  android-check:
-    needs: compile-task
-    strategy:
-      fail-fast: false
-      matrix:
-        api-level: [ 21, 23, 24, 25, 29, 30, 31, 32, 33, 34, 35 ]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Remove unnecessary tools
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          android: false
-          tool-cache: true
-          dotnet: true
-          haskell: true
-          swap-storage: true
-          docker-images: false
-          large-packages: false
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v3
-
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: 17
-
-      - name: Download Native Compilations
-        run: |
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "geoip" "${{ needs.compile-task.outputs.id-geoip }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "android" "${{ needs.compile-task.outputs.id-android }}"
-          cd external/build/package
-          rm -rf resource-exec-tor/src/jvmMain/resources
-          rm -rf resource-exec-tor-gpl/src/jvmMain/resources
-          rm -rf resource-noexec-tor/src/jvmMain/resources
-          rm -rf resource-noexec-tor-gpl/src/jvmMain/resources
-          rm -rf resource-lib-tor/src/jvmMain/resources
-          rm -rf resource-lib-tor-gpl/src/jvmMain/resources
-
-      - name: Run Android Instrumented Tests
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          emulator-boot-timeout: 300 # 5 minutes
-          api-level: ${{ matrix.api-level }}
-          arch: x86_64
-          script: ./gradlew connectedCheck -PKMP_TARGETS="ANDROID,ANDROID_ARM32,ANDROID_ARM64,ANDROID_X64,ANDROID_X86,JVM"
-
-      - name: Upload Test Reports
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: test-report-android-${{ matrix.api-level }}
+          name: linux-libc-x86_64
           path: |
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/connected/debug/*/logcat-*.txt
-          retention-days: 1
-
-  linux-check:
-    needs: compile-task
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: aarch64
-            distro: ubuntu16.04
-            expected-host: linux-libc
-            expected-arch: aarch64
-            java-version: 8
-          - arch: aarch64
-            distro: alpine_latest
-            expected-host: linux-musl
-            expected-arch: aarch64
-            java-version: 21
-          - arch: armv7
-            distro: ubuntu16.04
-            expected-host: linux-libc
-            expected-arch: armv7
-            java-version: 8
-          - arch: ppc64le
-            distro: ubuntu16.04
-            expected-host: linux-libc
-            expected-arch: ppc64
-            java-version: 8
-          - arch: riscv64
-            distro: ubuntu20.04
-            expected-host: linux-libc
-            expected-arch: riscv64
-            java-version: 11
-          - arch: i386
-            distro: _
-            expected-host: linux-musl
-            expected-arch: x86
-            java-version: 8
-          - arch: amd64
-            distro: _
-            expected-host: linux-musl
-            expected-arch: x86_64
-            java-version: 8
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v3
-
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: 11
-
-      - name: Download Native Compilation Artifacts
-        shell: bash
-        run: |
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "geoip" "${{ needs.compile-task.outputs.id-geoip }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "android" "${{ needs.compile-task.outputs.id-android }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "linux-libc" "${{ needs.compile-task.outputs.id-linux-libc }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "linux-musl" "${{ needs.compile-task.outputs.id-linux-musl }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "macos" "${{ needs.compile-task.outputs.id-macos }}"
-          ./.github/workflows/download_artifact.sh "${{ secrets.PAT_ACTION_READ }}" "mingw" "${{ needs.compile-task.outputs.id-mingw }}"
-
-      - name: Assemble test-linux.jar
-        run: >
-          ./gradlew :test-linux:assembleFatJar
-          -PKMP_TARGETS="JVM"
-
-      - name: Run tor
-        uses: uraimo/run-on-arch-action@v3
-        if: matrix.distro != '_'
-        with:
-          arch: ${{ matrix.arch }}
-          distro: ${{ matrix.distro }}
-          githubToken: ${{ github.token }}
-          dockerRunArgs: |
-            -v "${PWD}/test-linux/build:/work"
-            -u "$(id -u):$(id -g)"
-          install: |
-            case "${{ matrix.distro }}" in
-              ubuntu*)
-                apt-get update -q -y
-                apt-get install -q -y openjdk-${{ matrix.java-version }}-jre-headless
-                ;;
-              alpine*)
-                apk update
-                apk add openjdk${{ matrix.java-version }}
-                ;;
-              *)
-                echo 1>&2 "Host not configured..."
-                exit 2
-                ;;
-            esac
-          run: |
-            cd /work
-            java -jar libs/test-linux.jar "10" "${{ matrix.expected-host }}" "${{ matrix.expected-arch }}" "./test_linux/${{ matrix.expected-arch }}"
-
-      - name: Build Alpine Container
-        if: matrix.distro == '_'
-        run: >
-          docker build
-          -f "${PWD}/.github/docker/Dockerfile"
-          --build-arg ARCH=${{ matrix.arch }}
-          -t TestLinux/tor.alpine.${{ matrix.arch }}
-          "${PWD}/.github/docker"
-
-      - name: Run tor On Alpine
-        if: matrix.distro == '_'
-        run: >
-          docker run --rm
-          --pull never
-          -v "${PWD}/test-linux/build:/work"
-          -u "$(id -u):$(id -g)"
-          TestLinux/tor.alpine.${{ matrix.arch }}:latest
-          sh -c 'java -jar libs/test-linux.jar "10" "${{ matrix.expected-host }}" "${{ matrix.expected-arch }}" "./test_linux/${{ matrix.expected-arch }}"'
+            external/build/stage/linux-libc/x86_64/build.sh
+            external/build/stage/linux-libc/x86_64/*/logs/**
+            external/build/out/tor-gpl/linux-libc/x86_64/**
+          if-no-files-found: warn

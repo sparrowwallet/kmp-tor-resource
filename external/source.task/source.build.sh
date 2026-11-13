@@ -446,19 +446,13 @@ function __build:configure:target:finalize {
   __build:SCRIPT '  make install >> "$DIR_SCRIPT/libevent/logs/make.log" 2>> "$DIR_SCRIPT/libevent/logs/make.err"'
   __build:SCRIPT '}'
 
-  # TOR & TOR GPL
-  local conf_out=
+  # TOR GPL (only the --enable-gpl build is compiled)
   local tor_target=
-  for tor_target in $(echo "tor,tor-gpl" | tr "," " "); do
+  for tor_target in tor-gpl; do
     __build:SCRIPT ''
 
-    if [ "$tor_target" = "tor" ]; then
-      __build:SCRIPT 'compile_tor() {'
-      __build:SCRIPT '  compile_prepare "tor" "tor"'
-    else
-      __build:SCRIPT 'compile_tor_gpl() {'
-      __build:SCRIPT '  compile_prepare "tor" "tor-gpl" " (with flag --enable-gpl)"'
-    fi
+    __build:SCRIPT 'compile_tor_gpl() {'
+    __build:SCRIPT '  compile_prepare "tor" "tor-gpl" " (with flag --enable-gpl)"'
     __build:SCRIPT ''
 
   __build:SCRIPT '  # Includes are not enough when using --enable-lzma flag.
@@ -489,13 +483,7 @@ function __build:configure:target:finalize {
 
     __build:SCRIPT "  ./autogen.sh > \"\$DIR_SCRIPT/$tor_target/logs/autogen.log\" 2> \"\$DIR_SCRIPT/$tor_target/logs/autogen.err\""
 
-    if [ "$tor_target" = "tor" ]; then
-      conf_out="$CONF_TOR"
-    else
-      conf_out="$CONF_TOR_GPL"
-    fi
-
-    __build:SCRIPT "  $conf_out > \"\$DIR_SCRIPT/$tor_target/logs/configure.log\" 2> \"\$DIR_SCRIPT/$tor_target/logs/configure.err\""
+    __build:SCRIPT "  $CONF_TOR_GPL > \"\$DIR_SCRIPT/$tor_target/logs/configure.log\" 2> \"\$DIR_SCRIPT/$tor_target/logs/configure.err\""
     __build:SCRIPT ''
     __build:SCRIPT '  make clean > /dev/null 2>&1'
     __build:SCRIPT "  make -j\"\$NUM_JOBS\" > \"\$DIR_SCRIPT/$tor_target/logs/make.log\" 2> \"\$DIR_SCRIPT/$tor_target/logs/make.err\""
@@ -512,7 +500,6 @@ function __build:configure:target:finalize {
 
     __build:SCRIPT '}'
   done
-  unset conf_out
   unset tor_target
 
   __build:SCRIPT '
@@ -566,9 +553,6 @@ fi
 if needs_execution "$DIR_SCRIPT" "libevent" "lib/libevent.a"; then
   compile_libevent
 fi
-if needs_execution "$DIR_SCRIPT" "tor" "lib/libtor.a"; then
-  compile_tor
-fi
 if needs_execution "$DIR_SCRIPT" "tor-gpl" "lib/libtor.a"; then
   compile_tor_gpl
 fi
@@ -592,12 +576,6 @@ function __build:configure:target:finalize:output:shared {
   # NOTE: Android API 23 and below will still need LD_LIBRARY_PATH set
   local exec_ldflags="-Wl,-rpath,'\$ORIGIN'"
 
-  local jni_name="libtorjni.so"
-  local jni_cflags="-shared -Wl,--version-script,exports/kmp_tor-jni.map"
-  local jni_ldadd="-ldl -pthread"
-
-  local lib_load_cflags=""
-
   local shared_name="libtor.so"
   local shared_cflags="-shared -Wl,--version-script,exports/tor_api.map"
   local shared_ldadd="-ldl -lm -pthread"
@@ -607,9 +585,6 @@ function __build:configure:target:finalize:output:shared {
   case "$os_name" in
     "android")
       exec_name="libtorexec.so"
-      jni_cflags+=" -Wl,-soname,$jni_name"
-      jni_ldadd+=" -llog"
-      lib_load_cflags="-D__ANDROID__"
       shared_cflags+=" -Wl,-soname,$shared_name"
       ;;
     "linux")
@@ -621,26 +596,12 @@ function __build:configure:target:finalize:output:shared {
       # This is the same behavior as the tor.exe output by
       # tor-browser-build.
       exec_ldflags+=" -Wl,--subsystem,console"
-      jni_name="torjni.dll"
-      jni_ldadd="-lpthread -lws2_32"
       shared_name="tor.dll"
       shared_ldadd="-lws2_32 -lcrypt32 -lshlwapi -liphlpapi"
       ;;
     "macos")
       is_apple=true
       exec_ldflags=""
-
-      if [ "$os_subtype" = "-lts" ]; then
-        # Jvm/Js
-        jni_name="libtorjni.dylib"
-        jni_cflags="-dynamiclib"
-        jni_cflags+=" -exported_symbols_list exports/kmp_tor-jni.exp"
-        jni_cflags+=" -install_name @executable_path/$jni_name"
-        jni_ldadd=""
-      else
-        # Native. Disable JNI compilations.
-        jni_name=""
-      fi
 
       shared_name="libtor.dylib"
       shared_cflags="-dynamiclib"
@@ -654,8 +615,6 @@ function __build:configure:target:finalize:output:shared {
 
       # Disable executable compilations
       exec_name=""
-      # Disable JNI compilations
-      jni_name=""
 
       shared_cflags="-dynamiclib"
       shared_cflags+=" -exported_symbols_list exports/tor_api.exp"
@@ -675,10 +634,6 @@ function __build:configure:target:finalize:output:shared {
       __util:error "Unknown os_name[$os_name]"
       ;;
   esac
-
-  if [ -n "$jni_name" ]; then
-    __util:require:var_set "$jni_cflags" "jni_cflags"
-  fi
 
   __util:require:var_set "$shared_name" "shared_name"
   __util:require:var_set "$shared_cflags" "shared_cflags"
@@ -725,27 +680,6 @@ function __build:configure:target:finalize:output:shared {
     __build:SCRIPT ''
   fi
 
-  if [ -n "$jni_name" ]; then
-    __build:SCRIPT "  \$CC \$CFLAGS -c kmp_tor.c"
-    __build:SCRIPT "  \$CC \$CFLAGS -I\"\${JNI_H}\"/java6/include -c kmp_tor-jni.c"
-    __build:SCRIPT "  \$CC \$CFLAGS $lib_load_cflags -c lib_load.c"
-    if [ "$os_name" = "mingw" ]; then
-      __build:SCRIPT '  $CC $CFLAGS -DHAVE_AF_UNIX_H -c win32_sockets.c'
-    fi
-    __build:SCRIPT ''
-    __build:SCRIPT "  \$CC \$CFLAGS $jni_cflags \\"
-    __build:SCRIPT '    kmp_tor.o \'
-    __build:SCRIPT '    kmp_tor-jni.o \'
-    __build:SCRIPT '    lib_load.o \'
-    if [ "$os_name" = "mingw" ]; then
-      __build:SCRIPT '    win32_sockets.o \'
-    fi
-    __build:SCRIPT "    -o $jni_name \\"
-    __build:SCRIPT "    \$LDFLAGS $jni_ldadd"
-    __build:SCRIPT ''
-    __build:SCRIPT "  cp -a $jni_name \"\$DIR_SCRIPT/lib\$1/bin\""
-  fi
-
   if [ -n "$exec_name" ]; then
     __build:SCRIPT "  cp -a $exec_name \"\$DIR_SCRIPT/lib\$1/bin\""
   fi
@@ -755,17 +689,11 @@ function __build:configure:target:finalize:output:shared {
 
   local needs_execution_items="\"bin/$shared_name\""
 
-  if [ -n "$jni_name" ]; then
-    needs_execution_items+=" \"bin/$jni_name\""
-  fi
   if [ -n "$exec_name" ]; then
     needs_execution_items+=" \"bin/$exec_name\""
   fi
 
   __build:SCRIPT "
-if needs_execution \"\$DIR_SCRIPT\" \"libtor\" $needs_execution_items; then
-  compile_libtor \"tor\"
-fi
 if needs_execution \"\$DIR_SCRIPT\" \"libtor-gpl\" $needs_execution_items; then
   compile_libtor \"tor-gpl\"
 fi
@@ -786,9 +714,6 @@ fi
   if [ -n "$exec_name" ]; then
     __build:SCRIPT "  cp -a \"\$_bin/$exec_name\" \"\$_out\""
   fi
-  if [ -n "$jni_name" ]; then
-    __build:SCRIPT "  cp -a \"\$_bin/$jni_name\" \"\$_out\""
-  fi
 
   __build:SCRIPT ''
   __build:SCRIPT "  \$STRIP $strip_flags \"\$_out/$shared_name\" 2>/dev/null"
@@ -796,22 +721,17 @@ fi
   if [ -n "$exec_name" ]; then
     __build:SCRIPT "  \$STRIP $strip_flags \"\$_out/$exec_name\" 2>/dev/null"
   fi
-  if [ -n "$jni_name" ]; then
-    __build:SCRIPT "  \$STRIP $strip_flags \"\$_out/$jni_name\" 2>/dev/null"
-  fi
 
   __build:SCRIPT ''
 
   if [ "$os_name" = "android" ]; then
     __util:require:var_set "$exec_name" "exec_name"
-    __util:require:var_set "$jni_name" "jni_name"
 
     __build:SCRIPT "  _out_linux=\"out/\$1/linux-android/$os_arch\""
     __build:SCRIPT '  rm -rf "$_out_linux"'
     __build:SCRIPT '  mkdir -p "$_out_linux"'
     __build:SCRIPT "  cp -a \"\$_out/$shared_name\" \"\$_out_linux\""
     __build:SCRIPT "  cp -a \"\$_out/$exec_name\" \"\$_out_linux/tor\""
-    __build:SCRIPT "  cp -a \"\$_out/$jni_name\" \"\$_out_linux\""
     __build:SCRIPT '  unset _out_linux'
     __build:SCRIPT '  sleep 1'
     __build:SCRIPT ''
@@ -825,10 +745,6 @@ fi
     __build:SCRIPT "  echo \"        BIN: \$(du -sh \"\$_bin/$exec_name\" | cut -d 's' -f 1) \$(cd \"\$_bin\" && sha256sum \"$exec_name\")\""
     __build:SCRIPT "  echo \"        OUT: \$(du -sh \"\$_out/$exec_name\" | cut -d 'o' -f 1) \$(cd \"\$_out\" && sha256sum \"$exec_name\")\""
   fi
-  if [ -n "$jni_name" ]; then
-    __build:SCRIPT "  echo \"        BIN: \$(du -sh \"\$_bin/$jni_name\" | cut -d 's' -f 1) \$(cd \"\$_bin\" && sha256sum \"$jni_name\")\""
-    __build:SCRIPT "  echo \"        OUT: \$(du -sh \"\$_out/$jni_name\" | cut -d 'o' -f 1) \$(cd \"\$_out\" && sha256sum \"$jni_name\")\""
-  fi
 
   __build:SCRIPT ''
   __build:SCRIPT '  unset _bin'
@@ -837,10 +753,6 @@ fi
 
   needs_execution_items="\"$shared_name\""
 
-  if [ -n "$jni_name" ]; then
-    needs_execution_items+=" \"$jni_name\""
-  fi
-
   local needs_execution_items_linux_android="$needs_execution_items"
 
   if [ -n "$exec_name" ]; then
@@ -848,18 +760,12 @@ fi
   fi
 
   __build:SCRIPT "
-if needs_execution \"\$DIR_EXTERNAL/build\" \"out/tor/$DIR_OUT_SUFFIX\" $needs_execution_items; then
-  install_libtor \"tor\"
-fi
 if needs_execution \"\$DIR_EXTERNAL/build\" \"out/tor-gpl/$DIR_OUT_SUFFIX\" $needs_execution_items; then
   install_libtor \"tor-gpl\"
 fi"
 
   if [ "$os_name" = "android" ]; then
     __build:SCRIPT "
-if needs_execution \"\$DIR_EXTERNAL/build\" \"out/tor/linux-$os_name/$os_arch\" $needs_execution_items_linux_android \"tor\"; then
-  install_libtor \"tor\"
-fi
 if needs_execution \"\$DIR_EXTERNAL/build\" \"out/tor-gpl/linux-$os_name/$os_arch\" $needs_execution_items_linux_android \"tor\"; then
   install_libtor \"tor-gpl\"
 fi"
@@ -905,7 +811,7 @@ function __build:docker:execute {
   fi
 
   __docker:run "$DIR_TASK" \
-    "05nelsonm/build-env.$os_name$os_subtype.$docker_arch" \
+    "$os_name$os_subtype.$docker_arch" \
     "./$DIR_BUILD/build.sh" "$rebuild"
 
   trap - SIGINT

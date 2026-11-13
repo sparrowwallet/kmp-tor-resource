@@ -1,0 +1,47 @@
+name: build-env
+
+# Builds the toolchain images from build-env/ and pushes them to GHCR. Run by hand.
+# The digests it prints go into build-env/digests, which pins every image the build uses.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux-libc-x86_64:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Log In To GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Plain `docker build` (no buildx container builder): each Dockerfile's FROM names the
+      # previous image as :latest, which only the default builder can see from earlier in this run.
+      - name: Build Images
+        run: ./build-env/task.sh build:linux-libc:x86_64
+
+      # The summary is written only once every image has been pushed and has a digest.
+      - name: Push Images
+        run: |
+          ORG="$(sed -n 's/^readonly ORG="\(.*\)"$/\1/p' build-env/task.sh)"
+          if [ -z "$ORG" ]; then echo "::error::ORG not found in build-env/task.sh"; exit 1; fi
+
+          lines=""
+          for name in base staging.crosstool linux-libc.x86_64; do
+            digest="$(./.github/workflows/push_image.sh "$ORG.$name")"
+            lines+="$name=$digest"$'\n'
+          done
+
+          {
+            echo "### build-env digests"
+            echo ""
+            echo "Copy into \`build-env/digests\`:"
+            echo ""
+            echo '```'
+            printf '%s' "$lines"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

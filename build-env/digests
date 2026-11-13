@@ -1,0 +1,10 @@
+# Registry manifest digests of the build-env images on GHCR, as pushed by .github/workflows/build-env.yml.
+#
+# Format: <short name>=sha256:<64 hex>, where the image is ghcr.io/sparrowwallet/build-env.<short name>.
+# This file is the only place digests are recorded. external/source.task/source.docker.sh reads it for
+# every `docker run`, and refuses to run while an entry it needs is still a placeholder.
+#
+# To fill in: run the build-env workflow, then copy the lines from its job summary over the placeholders.
+base=PLACEHOLDER_RUN_BUILD_ENV_WORKFLOW
+staging.crosstool=PLACEHOLDER_RUN_BUILD_ENV_WORKFLOW
+linux-libc.x86_64=PLACEHOLDER_RUN_BUILD_ENV_WORKFLOW
