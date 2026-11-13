@@ -89,11 +89,7 @@ extensions.configure(ApiValidationExtension::class.java) {
 
         // Don't check these projects when building JVM only or Android only
         if (!KMP_TARGETS_ALL && KMP_TARGETS?.containsAll(setOf("ANDROID", "JVM")) == false) {
-            ignoredProjects.add("resource-exec-tor")
             ignoredProjects.add("resource-exec-tor-gpl")
-            ignoredProjects.add("resource-noexec-tor")
-            ignoredProjects.add("resource-noexec-tor-gpl")
-            ignoredProjects.add("resource-lib-tor")
             ignoredProjects.add("resource-lib-tor-gpl")
         }
     }

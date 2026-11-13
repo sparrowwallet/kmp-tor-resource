@@ -44,20 +44,8 @@ kmpConfiguration {
         androidLibrary {
             sourceSetMain {
                 dependencies {
-                    implementation("$group:resource-compilation-exec-tor:$version")
-                    implementation("$group:resource-compilation-exec-tor-gpl:$version")
-                    implementation("$group:resource-compilation-lib-tor:$version")
-                    implementation("$group:resource-compilation-lib-tor-gpl:$version")
-
                     // Should be a SEPARATE publication from -jvm
-                    implementation("$group:resource-lib-tor-android:$version")
                     implementation("$group:resource-lib-tor-gpl-android:$version")
-                }
-            }
-            sourceSetTest {
-                dependencies {
-                    implementation("$group:resource-android-unit-test-tor:$version")
-                    implementation("$group:resource-android-unit-test-tor-gpl:$version")
                 }
             }
         }
@@ -65,7 +53,6 @@ kmpConfiguration {
         jvm {
             sourceSetMain {
                 dependencies {
-                    implementation("$group:resource-lib-tor-jvm:$version")
                     implementation("$group:resource-lib-tor-gpl-jvm:$version")
                 }
             }
@@ -74,9 +61,7 @@ kmpConfiguration {
         js {
             sourceSetMain {
                 dependencies {
-                    implementation("$group:resource-lib-tor-js:$version")
                     implementation("$group:resource-lib-tor-gpl-js:$version")
-                    implementation(npm("kmp-tor.resource-exec-tor.all", project.npmVersion))
                     implementation(npm("kmp-tor.resource-exec-tor-gpl.all", project.npmVersion))
                 }
             }
@@ -86,9 +71,7 @@ kmpConfiguration {
         wasmJs {
             sourceSetMain {
                 dependencies {
-                    implementation("$group:resource-lib-tor-wasm-js:$version")
                     implementation("$group:resource-lib-tor-gpl-wasm-js:$version")
-                    implementation(npm("kmp-tor.resource-exec-tor.all", project.npmVersion))
                     implementation(npm("kmp-tor.resource-exec-tor-gpl.all", project.npmVersion))
                 }
             }
@@ -98,10 +81,7 @@ kmpConfiguration {
             sourceSetMain {
                 dependencies {
                     implementation("$group:resource-geoip:$version")
-                    implementation("$group:resource-exec-tor:$version")
                     implementation("$group:resource-exec-tor-gpl:$version")
-                    implementation("$group:resource-noexec-tor:$version")
-                    implementation("$group:resource-noexec-tor-gpl:$version")
                 }
             }
         }
@@ -120,7 +100,6 @@ kmpConfiguration {
             ),
             sourceSetMain = {
                 dependencies {
-                    implementation("$group:resource-lib-tor:$version")
                     implementation("$group:resource-lib-tor-gpl:$version")
                 }
             },

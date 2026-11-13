@@ -30,7 +30,7 @@ kmpConfiguration {
 
             sourceSetMain {
                 dependencies {
-                    implementation(project(":library:resource-exec-tor"))
+                    implementation(project(":library:resource-exec-tor-gpl"))
                     implementation(libs.kmp.tor.common.core)
                 }
             }
@@ -58,8 +58,8 @@ kmpConfiguration {
                 from(configuration.map { if (it.isDirectory) it else zipTree(it) })
                 with(project.tasks.getByName("jvmJar") as CopySpec)
                 dependsOn(":library:resource-geoip:jvmJar")
-                dependsOn(":library:resource-lib-tor:jvmJar")
-                dependsOn(":library:resource-exec-tor:jvmJar")
+                dependsOn(":library:resource-lib-tor-gpl:jvmJar")
+                dependsOn(":library:resource-exec-tor-gpl:jvmJar")
             }
         }
 
@@ -71,10 +71,10 @@ kmpConfiguration {
                 .getByType(GeoipResourceValidationExtension::class.java)
             val resourceValidationLibTor = project
                 .extensions
-                .getByType(LibTorResourceValidationExtension::class.java)
+                .getByType(LibTorResourceValidationExtension.GPL::class.java)
             val resourceValidationExecTor = project
                 .extensions
-                .getByType(ExecTorResourceValidationExtension::class.java)
+                .getByType(ExecTorResourceValidationExtension.GPL::class.java)
 
             val reportJvm by lazy {
                 val geoip = resourceValidationGeoip.errorReportJvmResources()

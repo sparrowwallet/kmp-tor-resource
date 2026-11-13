@@ -68,27 +68,13 @@ if (CHECK_PUBLICATION != null) {
 } else {
     if (TOOLING == null) {
         listOf(
-            "npmjs",
-            "resource-android-unit-test-tor",
-            "resource-android-unit-test-tor-gpl",
-            "resource-compilation-exec-tor",
-            "resource-compilation-exec-tor-gpl",
-            "resource-compilation-lib-tor",
-            "resource-compilation-lib-tor-gpl",
-            "resource-exec-tor",
             "resource-exec-tor-gpl",
-            "resource-filterjar-gradle-plugin",
-            "resource-frameworks-gradle-plugin",
             "resource-geoip",
-            "resource-lib-tor",
             "resource-lib-tor-gpl",
-            "resource-noexec-tor",
-            "resource-noexec-tor-gpl",
         ).forEach { module ->
             include(":library:$module")
         }
 
-        include(":test-android")
         include(":test-linux")
     }
 

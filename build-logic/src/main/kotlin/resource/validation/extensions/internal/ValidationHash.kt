@@ -178,7 +178,7 @@ sealed class ValidationHash private constructor() {
 
     private companion object {
 
-        // If modifying, update 'validate:all:update_hashes' task in 'task.sh'
+        // If modifying, update 'validate:update_hashes' task in 'task.sh'
         @JvmStatic
         private fun formatHashMismatch(
             actual: String,

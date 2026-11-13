@@ -60,8 +60,8 @@ function __sign:generate:detached:macos {
   local dir_bundle="$DIR_TMP/KmpTor.app"
   local dir_bundle_macos="$dir_bundle/Contents/MacOS"
 
-  local out_tor_dirnames="tor,tor-gpl"
-  local out_os_dirnames="ios-simulator,macos,macos-lts"
+  local out_tor_dirnames="tor-gpl"
+  local out_os_dirnames="macos-lts"
   local diff_ext=".signature"
 
   local cmd_sign="$RCODESIGN sign"

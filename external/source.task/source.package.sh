@@ -30,45 +30,15 @@ function __package:geoip {
   __package:file "tor/src/config" "nativeMain" "$1"
 }
 
-function __package:android {
-  __util:require:var_set "$dirname_out" "dirname_out"
-  __util:require:var_set "$1" "[1] ndk abi"
-  __util:require:var_set "$2" "[2] Lib name"
-
-  local permissions="755"
-  unset gzip
-
-  __package:file "build/out/$dirname_out/android/$1" "androidMain/jniLibs/$1" "$2"
-}
-
 function __package:linux:jvm {
   __util:require:var_set "$archs" "archs"
   __util:require:var_set "$os_subtype" "os_subtype"
 
   local arch=
-  local dirname_out="tor"
-  local dirname_final="resource-lib-tor"
+  local dirname_out="tor-gpl"
+  local dirname_final="resource-lib-tor-gpl"
   local rpath_native="resource/lib/tor"
   local target="linux$os_subtype"
-  for arch in $archs; do
-    __package:jvm "$arch" "libtor.so"
-  done
-
-  dirname_final="resource-exec-tor"
-  rpath_native="resource/exec/tor"
-  for arch in $archs; do
-    __package:jvm "$arch" "tor"
-  done
-
-  dirname_final="resource-noexec-tor"
-  rpath_native="resource/noexec/tor"
-  for arch in $archs; do
-    __package:jvm "$arch" "libtorjni.so"
-  done
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  rpath_native="resource/lib/tor"
   for arch in $archs; do
     __package:jvm "$arch" "libtor.so"
   done
@@ -77,12 +47,6 @@ function __package:linux:jvm {
   rpath_native="resource/exec/tor"
   for arch in $archs; do
     __package:jvm "$arch" "tor"
-  done
-
-  dirname_final="resource-noexec-tor-gpl"
-  rpath_native="resource/noexec/tor"
-  for arch in $archs; do
-    __package:jvm "$arch" "libtorjni.so"
   done
 }
 

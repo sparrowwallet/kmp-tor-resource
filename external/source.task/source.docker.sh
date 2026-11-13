@@ -27,25 +27,6 @@ readonly DOCKER="$(which docker)"
 readonly U_ID="$(id -u)"
 readonly G_ID="$(id -g)"
 
-function __docker:build {
-  __util:require:cmd "$DOCKER" "docker"
-  __util:require:file_exists "$1" "[1] docker"
-  __util:require:var_set "$2" "[2] build-env image (without tag)"
-  __util:require:var_set "$3" "[3] docker directory"
-
-  local cmd_build="$DOCKER build -f $1 --build-arg TAG_BUILD_ENV=$TAG_DOCKER_BUILD_ENV -t $2:$TAG_DOCKER_BUILD_ENV $3"
-
-  if $DRY_RUN; then
-    echo "
-    $cmd_build"
-    return 0
-  else
-    echo ""
-  fi
-
-  ${cmd_build}
-}
-
 function __docker:run {
   local silent=false
   if [ "$1" = "--silent" ]; then

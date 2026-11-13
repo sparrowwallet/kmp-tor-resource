@@ -14,14 +14,10 @@
  * limitations under the License.
  **/
 import com.android.build.gradle.tasks.MergeSourceSetFolders
-import io.matthewnelson.kmp.configuration.extension.KmpConfigurationExtension
 import io.matthewnelson.kmp.configuration.extension.container.target.KmpConfigurationContainerDsl
 import io.matthewnelson.kmp.configuration.extension.container.target.TargetAndroidContainer
 import org.gradle.api.Action
 import org.gradle.api.Project
-import resource.validation.extensions.ExecTorResourceValidationExtension
-import resource.validation.extensions.LibTorResourceValidationExtension
-import resource.validation.extensions.NoExecTorResourceValidationExtension
 
 fun KmpConfigurationContainerDsl.androidLibrary(
     namespace: String,
@@ -160,58 +156,5 @@ fun KmpConfigurationContainerDsl.configureAndroidNativeEmulatorTests(project: Pr
             if (name != "mergeDebugAndroidTestJniLibFolders") return@all
             nativeTestBinaryTasks.forEach { task -> dependsOn(task) }
         }
-    }
-}
-
-fun KmpConfigurationExtension.configureAndroidUnitTestTor(
-    action: Action<KmpConfigurationContainerDsl>,
-) {
-    require(project.name.startsWith("resource-android-unit-test-tor")) { "Invalid project" }
-
-    val isGpl = project.name.endsWith("gpl")
-    val libResourceValidation by lazy {
-        if (isGpl) {
-            LibTorResourceValidationExtension.GPL::class.java
-        } else {
-            LibTorResourceValidationExtension::class.java
-        }.let { project.extensions.getByType(it) }
-    }
-    val execResourceValidation by lazy {
-        if (isGpl) {
-            ExecTorResourceValidationExtension.GPL::class.java
-        } else {
-            ExecTorResourceValidationExtension::class.java
-        }.let { project.extensions.getByType(it) }
-    }
-    val noExecResourceValidation by lazy {
-        if (isGpl) {
-            NoExecTorResourceValidationExtension.GPL::class.java
-        } else {
-            NoExecTorResourceValidationExtension::class.java
-        }.let { project.extensions.getByType(it) }
-    }
-
-    configure {
-        options {
-            useUniqueModuleNames = true
-        }
-
-        androidLibrary(namespace = "io.matthewnelson.kmp.tor.resource.android.unit.test.tor") {
-            target { publishLibraryVariants("release") }
-
-            android {
-                sourceSets.getByName("main").resources {
-                    srcDir(libResourceValidation.jvmNativeLibResourcesSrcDir())
-                    srcDir(execResourceValidation.jvmNativeLibResourcesSrcDir())
-                    srcDir(noExecResourceValidation.jvmNativeLibResourcesSrcDir())
-                }
-            }
-        }
-
-        common { pluginIds("publication", "resource-validation") }
-
-        action.execute(this)
-
-        configureKotlinVersionCompatibility()
     }
 }

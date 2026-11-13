@@ -791,20 +791,6 @@ function __build:docker:execute {
     "ppc64") docker_arch="ppc64le" ;;
   esac
 
-#  case "$os_name" in
-#    "ios"|"tvos"|"watchos")
-#      # Currently have to build containers locally until they
-#      # are moved to the build-env project
-#      __docker:build "$DIR_TASK/docker/Dockerfile.$os_name.base" \
-#        "05nelsonm/build-env.$os_name.base" \
-#        "$DIR_TASK/docker"
-#
-#      __docker:build "$DIR_TASK/docker/Dockerfile.$os_name$os_subtype.$docker_arch" \
-#        "05nelsonm/build-env.$os_name$os_subtype.$docker_arch" \
-#        "$DIR_TASK/docker"
-#      ;;
-#  esac
-
   local rebuild=""
   if $REBUILD; then
     rebuild="--rebuild"

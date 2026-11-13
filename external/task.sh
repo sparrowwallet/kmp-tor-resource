@@ -26,129 +26,23 @@ readonly TOR_TAG="tor-0.4.9.16"
 readonly TOR_COMMIT="c51547ca15ea665950dd154e160051c57f5719db"
 
 function build:all { ## Builds all targets
-  build:all:desktop
-  build:all:mobile
-}
-
-function build:all:android { ## Builds all Android targets
-  build:android:aarch64
-  build:android:armv7
-  build:android:x86
-  build:android:x86_64
-}
-
-function build:all:desktop { ## Builds all Linux, macOS, MinGW targets
   build:all:linux-libc
-  build:all:linux-musl
   build:all:macos
   build:all:mingw
 }
 
-function build:all:ios { ## Builds all iOS targets
-  build:ios-simulator:aarch64
-  build:ios-simulator:x86_64
-  build:ios:aarch64
-}
-
 function build:all:linux-libc { ## Builds all Linux Libc targets
   build:linux-libc:aarch64
-  build:linux-libc:armv7
-  build:linux-libc:ppc64
-  build:linux-libc:riscv64
-  build:linux-libc:x86
   build:linux-libc:x86_64
 }
 
-function build:all:linux-musl { ## Builds all Linux Musl targets
-  build:linux-musl:aarch64
-  build:linux-musl:x86
-  build:linux-musl:x86_64
-}
-
-function build:all:macos { ## Builds all macOS and macOS LTS targets
+function build:all:macos { ## Builds all macOS LTS targets
   build:macos-lts:aarch64
   build:macos-lts:x86_64
-  build:macos:aarch64
-  build:macos:x86_64
-}
-
-function build:all:mobile { ## Builds all Android and iOS targets
-  build:all:android
-  build:all:ios
 }
 
 function build:all:mingw { ## Builds all MinGW targets
-  build:mingw:x86
   build:mingw:x86_64
-}
-
-function build:android:aarch64 { ## Builds Android arm64-v8a
-  local os_name="android"
-  local os_arch="aarch64"
-  local openssl_target="android-arm64"
-  local ndk_abi="arm64-v8a"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:android:armv7 { ## Builds Android armeabi-v7a
-  local os_name="android"
-  local os_arch="armv7"
-  local openssl_target="android-arm"
-  local ndk_abi="armeabi-v7a"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:android:x86 { ## Builds Android i686
-  local os_name="android"
-  local os_arch="x86"
-  local openssl_target="android-x86"
-  local ndk_abi="x86"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:android:x86_64 { ## Builds Android x86_64
-  local os_name="android"
-  local os_arch="x86_64"
-  local openssl_target="android-x86_64"
-  local ndk_abi="x86_64"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:ios-simulator:aarch64 { ## Builds iOS Simulator arm64
-  local os_name="ios"
-  local os_subtype="-simulator"
-  local os_arch="aarch64"
-  local openssl_target="iossimulator-xcrun"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:ios-simulator:x86_64 { ## Builds iOS Simulator x86_64
-  local os_name="ios"
-  local os_subtype="-simulator"
-  local os_arch="x86_64"
-  local openssl_target="iossimulator-xcrun"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:ios:aarch64 { ## Builds iOS           arm64
-  local os_name="ios"
-  local os_arch="aarch64"
-  local openssl_target="ios64-xcrun"
-  local cc_clang="yes"
-  __build:configure:target:init
-  __build:docker:execute
 }
 
 function build:linux-libc:aarch64 { ## Builds Linux Libc aarch64
@@ -156,47 +50,6 @@ function build:linux-libc:aarch64 { ## Builds Linux Libc aarch64
   local os_subtype="-libc"
   local os_arch="aarch64"
   local openssl_target="linux-aarch64"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:linux-libc:armv7 { ## Builds Linux Libc armv7a eabihf
-  local os_name="linux"
-  local os_subtype="-libc"
-  local os_arch="armv7"
-
-  # Using linux-armv4 which, as noted in openssl/Configurations/10-main.conf,
-  # will not pass any specific -march flag like with other openssl targets.
-  # The pre-compiled toolchain being used (05nelsonm/build-env.linux-libc.armv7a)
-  # is configured such that -march=armv7-a is always specified.
-  local openssl_target="linux-armv4"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:linux-libc:ppc64 { ## Builds Linux Libc powerpc64le
-  local os_name="linux"
-  local os_subtype="-libc"
-  local os_arch="ppc64"
-  local openssl_target="linux-ppc64le"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:linux-libc:riscv64 { ## Builds Linux Libc riscv64
-  local os_name="linux"
-  local os_subtype="-libc"
-  local os_arch="riscv64"
-  local openssl_target="linux64-riscv64"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:linux-libc:x86 { ## Builds Linux Libc i686
-  local os_name="linux"
-  local os_subtype="-libc"
-  local os_arch="x86"
-  local openssl_target="linux-x86"
   __build:configure:target:init
   __build:docker:execute
 }
@@ -210,45 +63,9 @@ function build:linux-libc:x86_64 { ## Builds Linux Libc x86_64
   __build:docker:execute
 }
 
-function build:linux-musl:aarch64 { ## Builds Linux Musl aarch64
-  local os_name="linux"
-  local os_subtype="-musl"
-  local os_arch="aarch64"
-  local openssl_target="linux-aarch64"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:linux-musl:x86 { ## Builds Linux Musl i686
-  local os_name="linux"
-  local os_subtype="-musl"
-  local os_arch="x86"
-  local openssl_target="linux-x86"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:linux-musl:x86_64 { ## Builds Linux Musl x86_64
-  local os_name="linux"
-  local os_subtype="-musl"
-  local os_arch="x86_64"
-  local openssl_target="linux-x86_64"
-  __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:macos-lts:aarch64 { ## Builds macOS LTS (SDK 12.3 - Jvm/Js) aarch64
-  local os_subtype="-lts"
-  build:macos:aarch64
-}
-
-function build:macos-lts:x86_64 { ## Builds macOS LTS (SDK 12.3 - Jvm/Js) x86_64
-  local os_subtype="-lts"
-  build:macos:x86_64
-}
-
-function build:macos:aarch64 { ## Builds macOS     (SDK 15.4 - Native) aarch64
+function build:macos-lts:aarch64 { ## Builds macOS LTS (SDK 12.3) aarch64
   local os_name="macos"
+  local os_subtype="-lts"
   local os_arch="aarch64"
   local openssl_target="darwin64-arm64-cc"
   local cc_clang="yes"
@@ -256,21 +73,13 @@ function build:macos:aarch64 { ## Builds macOS     (SDK 15.4 - Native) aarch64
   __build:docker:execute
 }
 
-function build:macos:x86_64 { ## Builds macOS     (SDK 15.4 - Native) x86_64
+function build:macos-lts:x86_64 { ## Builds macOS LTS (SDK 12.3) x86_64
   local os_name="macos"
+  local os_subtype="-lts"
   local os_arch="x86_64"
   local openssl_target="darwin64-x86_64-cc"
   local cc_clang="yes"
   __build:configure:target:init
-  __build:docker:execute
-}
-
-function build:mingw:x86 { ## Builds MinGW i686
-  local os_name="mingw"
-  local os_arch="x86"
-  local openssl_target="mingw"
-  __build:configure:target:init
-  __build:LDFLAGS '-Wl,--no-seh'
   __build:docker:execute
 }
 
@@ -316,10 +125,7 @@ $(
 
 function package:all { ## Packages all build/out contents & geoip files
   package:geoip
-  package:android
-  package:ios
   package:linux-libc
-  package:linux-musl
   package:macos
   package:mingw
 }
@@ -330,225 +136,61 @@ function package:geoip { ## Packages geoip & geoip6 files
   __package:geoip "geoip6"
 }
 
-function package:android { ## Packages all Android build/out contents
-  local archs="arm64-v8a armeabi-v7a x86 x86_64"
-  local arch=
-  local dirname_out="tor"
-  local dirname_final="resource-compilation-lib-tor"
-  for arch in $archs; do
-    __package:android "$arch" "libtor.so"
-  done
-
-  dirname_final="resource-compilation-exec-tor"
-  for arch in $archs; do
-    __package:android "$arch" "libtorexec.so"
-  done
-
-  dirname_final="resource-noexec-tor"
-  for arch in $archs; do
-    __package:android "$arch" "libtorjni.so"
-  done
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-compilation-lib-tor-gpl"
-  for arch in $archs; do
-    __package:android "$arch" "libtor.so"
-  done
-
-  dirname_final="resource-compilation-exec-tor-gpl"
-  for arch in $archs; do
-    __package:android "$arch" "libtorexec.so"
-  done
-
-  dirname_final="resource-noexec-tor-gpl"
-  for arch in $archs; do
-    __package:android "$arch" "libtorjni.so"
-  done
-
-  archs="aarch64 armv7 x86 x86_64"
-  local os_subtype="-android"
-  unset arch dirname_out dirname_final
-  __package:linux:jvm
-}
-
-function package:ios { ## Packages all iOS & iOS Simulator build/out contents
-  local target="ios-simulator"
-  local dirname_out="tor"
-  local dirname_final="resource-lib-tor"
-  local native_resource="io.matthewnelson.kmp.tor.resource.lib.tor.internal"
-  __package:native:codesign "aarch64" "libtor.dylib" "iosSimulatorArm64Main"
-  __package:native:codesign "x86_64" "libtor.dylib" "iosX64Main"
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  __package:native:codesign "aarch64" "libtor.dylib" "iosSimulatorArm64Main"
-  __package:native:codesign "x86_64" "libtor.dylib" "iosX64Main"
-  unset target
-  unset native_resource
-
-  local permissions="775"
-  local gzip="no"
-  dirname_final="resource-frameworks-gradle-plugin"
-  for dirname_out in $(echo "tor,tor-gpl" | tr "," " "); do
-    __package:file "build/out/$dirname_out/ios/aarch64" "jvmMain/resources/io/matthewnelson/kmp/tor/resource/frameworks/native/$dirname_out/ios" "LibTor"
-  done
-}
-
 function package:linux-libc { ## Packages all Linux Libc build/out contents
-  local archs="aarch64 armv7 ppc64 riscv64 x86 x86_64"
+  local archs="aarch64 x86_64"
   local os_subtype="-libc"
   __package:linux:jvm
   unset archs os_subtype
 
-  local dirname_out="tor"
-  local dirname_final="resource-lib-tor"
+  local dirname_out="tor-gpl"
+  local dirname_final="resource-lib-tor-gpl"
   local target="linux-libc"
 
   local native_resource="io.matthewnelson.kmp.tor.resource.lib.tor.internal"
   __package:native "aarch64" "libtor.so" "linuxArm64Main"
   __package:native "x86_64" "libtor.so" "linuxX64Main"
 
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  __package:native "aarch64" "libtor.so" "linuxArm64Main"
-  __package:native "x86_64" "libtor.so" "linuxX64Main"
-
-  dirname_out="tor"
-  dirname_final="resource-exec-tor"
+  dirname_final="resource-exec-tor-gpl"
   native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
   __package:native "aarch64" "tor" "linuxArm64Main"
   __package:native "x86_64" "tor" "linuxX64Main"
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-exec-tor-gpl"
-  __package:native "aarch64" "tor" "linuxArm64Main"
-  __package:native "x86_64" "tor" "linuxX64Main"
 }
 
-function package:linux-musl { ## Packages all Linux Musl build/out contents
-  local archs="aarch64 x86 x86_64"
-  local os_subtype="-musl"
-  __package:linux:jvm
-}
-
-function package:macos { ## Packages all macOS & macOS LTS build/out contents
-  local dirname_out="tor"
-  local dirname_final="resource-lib-tor"
+function package:macos { ## Packages all macOS LTS build/out contents
+  local dirname_out="tor-gpl"
+  local dirname_final="resource-lib-tor-gpl"
   local rpath_native="resource/lib/tor"
   local target="macos-lts"
   __package:jvm:codesign "aarch64" "libtor.dylib"
   __package:jvm:codesign "x86_64" "libtor.dylib"
   __package:jvm:move:macos-lts
 
-  dirname_final="resource-exec-tor"
-  rpath_native="resource/exec/tor"
-  __package:jvm:codesign "aarch64" "tor"
-  __package:jvm:codesign "x86_64" "tor"
-  __package:jvm:move:macos-lts
-
-  dirname_final="resource-noexec-tor"
-  rpath_native="resource/noexec/tor"
-  __package:jvm:codesign "aarch64" "libtorjni.dylib"
-  __package:jvm:codesign "x86_64" "libtorjni.dylib"
-  __package:jvm:move:macos-lts
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  rpath_native="resource/lib/tor"
-  __package:jvm:codesign "aarch64" "libtor.dylib"
-  __package:jvm:codesign "x86_64" "libtor.dylib"
-  __package:jvm:move:macos-lts
-
   dirname_final="resource-exec-tor-gpl"
   rpath_native="resource/exec/tor"
   __package:jvm:codesign "aarch64" "tor"
   __package:jvm:codesign "x86_64" "tor"
   __package:jvm:move:macos-lts
-
-  dirname_final="resource-noexec-tor-gpl"
-  rpath_native="resource/noexec/tor"
-  __package:jvm:codesign "aarch64" "libtorjni.dylib"
-  __package:jvm:codesign "x86_64" "libtorjni.dylib"
-  __package:jvm:move:macos-lts
-
-  unset rpath_native
-
-  target="macos"
-  dirname_out="tor"
-  dirname_final="resource-lib-tor"
-  local native_resource="io.matthewnelson.kmp.tor.resource.lib.tor.internal"
-  __package:native:codesign "aarch64" "libtor.dylib" "macosArm64Main"
-  __package:native:codesign "x86_64" "libtor.dylib" "macosX64Main"
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  __package:native:codesign "aarch64" "libtor.dylib" "macosArm64Main"
-  __package:native:codesign "x86_64" "libtor.dylib" "macosX64Main"
-
-  dirname_out="tor"
-  dirname_final="resource-exec-tor"
-  native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
-  __package:native:codesign "aarch64" "tor" "macosArm64Main"
-  __package:native:codesign "x86_64" "tor" "macosX64Main"
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-exec-tor-gpl"
-  __package:native:codesign "aarch64" "tor" "macosArm64Main"
-  __package:native:codesign "x86_64" "tor" "macosX64Main"
 }
 
 function package:mingw { ## Packages all MinGW build/out contents
-  local dirname_out="tor"
-  local dirname_final="resource-lib-tor"
+  local dirname_out="tor-gpl"
+  local dirname_final="resource-lib-tor-gpl"
   local rpath_native="resource/lib/tor"
   local target="mingw"
-  __package:jvm:codesign "x86" "tor.dll"
-  __package:jvm:codesign "x86_64" "tor.dll"
-
-  dirname_final="resource-exec-tor"
-  rpath_native="resource/exec/tor"
-  __package:jvm:codesign "x86" "tor.exe"
-  __package:jvm:codesign "x86_64" "tor.exe"
-
-  dirname_final="resource-noexec-tor"
-  rpath_native="resource/noexec/tor"
-  __package:jvm:codesign "x86" "torjni.dll"
-  __package:jvm:codesign "x86_64" "torjni.dll"
-
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  rpath_native="resource/lib/tor"
-  __package:jvm:codesign "x86" "tor.dll"
   __package:jvm:codesign "x86_64" "tor.dll"
 
   dirname_final="resource-exec-tor-gpl"
   rpath_native="resource/exec/tor"
-  __package:jvm:codesign "x86" "tor.exe"
   __package:jvm:codesign "x86_64" "tor.exe"
-
-  dirname_final="resource-noexec-tor-gpl"
-  rpath_native="resource/noexec/tor"
-  __package:jvm:codesign "x86" "torjni.dll"
-  __package:jvm:codesign "x86_64" "torjni.dll"
 
   unset rpath_native
 
-  dirname_out="tor"
-  dirname_final="resource-lib-tor"
+  dirname_final="resource-lib-tor-gpl"
   local native_resource="io.matthewnelson.kmp.tor.resource.lib.tor.internal"
   __package:native:codesign "x86_64" "tor.dll" "mingwX64Main"
 
-  dirname_out="tor-gpl"
-  dirname_final="resource-lib-tor-gpl"
-  __package:native:codesign "x86_64" "tor.dll" "mingwX64Main"
-
-  dirname_out="tor"
-  dirname_final="resource-exec-tor"
-  native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
-  __package:native:codesign "x86_64" "tor.exe" "mingwX64Main"
-
-  dirname_out="tor-gpl"
   dirname_final="resource-exec-tor-gpl"
+  native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
   __package:native:codesign "x86_64" "tor.exe" "mingwX64Main"
 
   unset native_resource
@@ -558,17 +200,10 @@ function package:mingw { ## Packages all MinGW build/out contents
   local gzip="no"
   echo "# https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-redirection#how-to-redirect-dlls-for-unpackaged-apps" > "$DIR_TASK/build/tor.exe.local"
 
-  dirname_final="resource-exec-tor"
-  __package:file "build" "jvmMain/resources/io/matthewnelson/kmp/tor/resource/exec/tor/native/mingw" "tor.exe.local"
-
   dirname_final="resource-exec-tor-gpl"
   __package:file "build" "jvmMain/resources/io/matthewnelson/kmp/tor/resource/exec/tor/native/mingw" "tor.exe.local"
 
-  dirname_final="resource-exec-tor"
   local native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
-  __package:file "build" "mingwX64Main" "tor.exe.local"
-
-  dirname_final="resource-exec-tor-gpl"
   __package:file "build" "mingwX64Main" "tor.exe.local"
 
   rm -rf "$DIR_TASK/build/tor.exe.local"
@@ -583,7 +218,7 @@ function sign:macos { ## 2 ARGS - [1]: smartcard-slot (e.g. 9c)  [2]: /path/to/a
   __sign:input:hsm_pin
   local smartcard_slot="$1"
   local path_apikey="$2"
-  local lib_names="libtor.dylib,tor,libtorjni.dylib"
+  local lib_names="libtor.dylib,tor"
 
   __sign:generate:detached:macos "aarch64"
   __sign:generate:detached:macos "x86_64"
@@ -597,14 +232,9 @@ function sign:mingw { ## Codesign mingw binaries (see codesign/windows.pkcs11.sa
   local hsm_pin=
   __sign:input:hsm_pin
 
-  local lib_names="tor.dll,tor.exe,torjni.dll"
-  local dirname_out="tor"
+  local lib_names="tor.dll,tor.exe"
+  local dirname_out="tor-gpl"
 
-  __sign:generate:detached:mingw "x86"
-  __sign:generate:detached:mingw "x86_64"
-
-  dirname_out="tor-gpl"
-  __sign:generate:detached:mingw "x86"
   __sign:generate:detached:mingw "x86_64"
 }
 
@@ -613,50 +243,23 @@ function validate { ## Checks the build/package directory output against expecte
   targets+=",LINUX_ARM64,LINUX_X64"
   targets+=",MACOS_ARM64,MACOS_X64"
   targets+=",MINGW_X64"
-  targets+=",IOS_ARM64,IOS_SIMULATOR_ARM64,IOS_X64"
-  targets+=",TVOS_ARM64,TVOS_SIMULATOR_ARM64,TVOS_X64"
-  targets+=",WATCHOS_ARM32,WATCHOS_ARM64,WATCHOS_DEVICE_ARM64,WATCHOS_SIMULATOR_ARM64,WATCHOS_X64"
-
-  if [ -n "$include_android" ]; then
-    targets="ANDROID,$targets"
-  fi
 
   cd "$DIR_TASK/.."
   ./gradlew clean -PKMP_TARGETS="$targets"
   ./gradlew prepareKotlinBuildScriptModel -PKMP_TARGETS="$targets"
 
-  if [ -n "$include_android" ]; then
-    __validate:report "resource-compilation-exec-tor"
-    __validate:report "resource-compilation-exec-tor-gpl"
-    __validate:report "resource-compilation-lib-tor"
-    __validate:report "resource-compilation-lib-tor-gpl"
-  fi
-  __validate:report "resource-exec-tor"
   __validate:report "resource-exec-tor-gpl"
-  __validate:report "resource-frameworks-gradle-plugin"
   __validate:report "resource-geoip"
-  __validate:report "resource-lib-tor"
   __validate:report "resource-lib-tor-gpl"
-  __validate:report "resource-noexec-tor"
-  __validate:report "resource-noexec-tor-gpl"
 }
 
-function validate:all { ## Includes Android (which are implicitly checked in validate). Requires Java 17+ & Android Studio
-  local include_android="yes"
-  validate
-}
-
-function validate:all:update_hashes { ## Updates gradle extensions with new hash values. Requires Java 17+ & Android Studio
-  local extension_kt_files="CompilationExecTorResourceValidationExtension.kt"
-  extension_kt_files+=",CompilationLibTorResourceValidationExtension.kt"
-  extension_kt_files+=",ExecTorResourceValidationExtension.kt"
+function validate:update_hashes { ## Updates gradle extensions with new hash values
+  local extension_kt_files="ExecTorResourceValidationExtension.kt"
   extension_kt_files+=",LibTorResourceValidationExtension.kt"
-  extension_kt_files+=",FrameworksResourceValidationExtension.kt"
   extension_kt_files+=",GeoipResourceValidationExtension.kt"
-  extension_kt_files+=",NoExecTorResourceValidationExtension.kt"
 
   local output=""
-  output="$(validate:all | grep "ERROR\[" | grep "did not match")"
+  output="$(validate | grep "ERROR\[" | grep "did not match")"
   local extension_kt_file=""
   local new_hash=""
   local old_hash=""
@@ -699,7 +302,7 @@ function validate:all:update_hashes { ## Updates gradle extensions with new hash
     fi
   done
 
-  validate:all
+  validate
 }
 
 function __require:tor:commit {

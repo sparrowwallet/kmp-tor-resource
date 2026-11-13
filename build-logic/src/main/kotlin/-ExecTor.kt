@@ -21,8 +21,6 @@ import org.gradle.configurationcache.extensions.capitalized
 import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.the
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
-import resource.validation.extensions.CompilationExecTorResourceValidationExtension
-import resource.validation.extensions.CompilationLibTorResourceValidationExtension
 import resource.validation.extensions.ExecTorResourceValidationExtension
 import resource.validation.extensions.LibTorResourceValidationExtension
 import java.io.File
@@ -63,18 +61,6 @@ fun KmpConfigurationExtension.configureExecTor(
                         .resolve("androidInstrumentedTest")
                         .resolve("AndroidManifest.xml")
                 )
-            }
-
-            sourceSetMain {
-                dependencies {
-                    implementation(project(":library:resource-compilation-exec-tor$suffix"))
-                }
-            }
-
-            sourceSetTest {
-                dependencies {
-                    implementation(project(":library:resource-android-unit-test-tor$suffix"))
-                }
             }
 
             sourceSetTestInstrumented {
@@ -247,23 +233,9 @@ fun KmpConfigurationExtension.configureExecTor(
                     LibTorResourceValidationExtension::class.java
                 }.let { project.extensions.getByType(it) }
 
-                val resourceValidationCompilationExecTor = if (isGpl) {
-                    CompilationExecTorResourceValidationExtension.GPL::class.java
-                } else {
-                    CompilationExecTorResourceValidationExtension::class.java
-                }.let { project.extensions.getByType(it) }
-
-                val resourceValidationCompilationLibTor = if (isGpl) {
-                    CompilationLibTorResourceValidationExtension.GPL::class.java
-                } else {
-                    CompilationLibTorResourceValidationExtension::class.java
-                }.let { project.extensions.getByType(it) }
-
-                val reportAndroid by lazy {
-                    val exec = resourceValidationCompilationExecTor.errorReportAndroidJniResources()
-                    val lib = resourceValidationCompilationLibTor.errorReportAndroidJniResources()
-                    exec + lib
-                }
+                // The resource-compilation-* modules that provided the Android jniLibs were removed,
+                // so Android has no real resources and never runs the full tests.
+                val reportAndroid = "Android resources are not built"
                 val reportJvm by lazy {
                     val exec = resourceValidationExecTor.errorReportJvmNativeLibResources()
                     val lib = resourceValidationLibTor.errorReportJvmNativeLibResources()
