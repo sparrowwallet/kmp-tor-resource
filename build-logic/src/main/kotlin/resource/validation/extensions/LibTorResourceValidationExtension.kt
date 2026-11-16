@@ -34,13 +34,13 @@ abstract class LibTorResourceValidationExtension @Inject internal constructor(
     packageName = "io.matthewnelson.kmp.tor.resource.lib.tor",
 ) {
 
-    private val jvmLinuxLibcAarch64: String = "89d61dbf027845e72dee651a2588a2889ea2f20fe3e347e0abb1aac64ed3188e"
-    private val jvmLinuxLibcX86_64: String = "4cb62ee9c300fc2ef86cf15757c83e5315b1d03b595f2cb681fd8d30b4820146"
+    private val jvmLinuxLibcAarch64: String = "b90fd99696e1462cf45ec1b32d55bb6f9daa3f29b8a97e8f044ab6da0880da97"
+    private val jvmLinuxLibcX86_64: String = "0630685b64b0be41cd7f52fec0a75e83c5c3fc30967d5886cbf70bd387b3b8b3"
 
-    private val jvmMacosAarch64: String = "f2541e538fd5429771b21d966a80d578c5bac76f83085caa37c120fc2a33a871"
-    private val jvmMacosX86_64: String = "1906c7f0ad4b9dd21e986b8c12a0c4d115882e4bd3f710e2b455c3432bc1dc91"
+    private val jvmMacosAarch64: String = "5bb1dfcd9872581a9fea8dff4a0fa3235da1290cc7123adb2fab020a9012af16"
+    private val jvmMacosX86_64: String = "3ad6dfa6e7d18ec72a6a178b4ddacd6f11c53625a9ccc78c9882c0f9eb3462fa"
 
-    private val jvmMingwX86_64: String = "7831d6e4d4e9145d2e092f1aec0ec0eeac0d580564deec433b9cd08d8f716872"
+    private val jvmMingwX86_64: String = "14edf54c41630e04052c4db9f8ee18c7233d428d612ee3981a092e80fa6be21b"
 
     fun jvmNativeLibResourcesSrcDir(): File = jvmNativeLibsResourcesSrcDirProtected()
     fun errorReportJvmNativeLibResources(): String = errorReportJvmNativeLibsProtected()

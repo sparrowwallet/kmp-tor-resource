@@ -37,10 +37,10 @@ abstract class ExecTorResourceValidationExtension @Inject internal constructor(
     private val jvmLinuxLibcAarch64: String = "67d64240c27d4571935ab5d5a05ac870cf880b1f6f8189b06ef52d09979270cd"
     private val jvmLinuxLibcX86_64: String = "eb6ac226e3e542b5ad039252ebbfd363ba7b5993e03179ccf78a8f1c0b113ea8"
 
-    private val jvmMacosAarch64: String = "a74191dce6c166b4a124605a805ebe1cd7477c85364ec513473f778b95bcf993"
-    private val jvmMacosX86_64: String = "f5a6156d072ccb8ed2bc643593341b40901d7566ed6e606346077d1734793be9"
+    private val jvmMacosAarch64: String = "e6d8dad046ec3506e980f0c646189b9a7ab12eb4fba204cdaa967f146fc43523"
+    private val jvmMacosX86_64: String = "e6a3f14ea3579d3c22c70394f7a66cf5ba970d99bf07337a563f62bc4f65eb42"
 
-    private val jvmMingwX86_64: String = "93b21caf51934686fdda954b31466f496f3aa71cd0c4a1458cc8823fab261a43"
+    private val jvmMingwX86_64: String = "c933b5db9be98d41df718c14d3eb8c1e1b56ffc38b116e1849063902b7d2f8db"
 
     fun jvmNativeLibResourcesSrcDir(): File = jvmNativeLibsResourcesSrcDirProtected()
     fun errorReportJvmNativeLibResources(): String = errorReportJvmNativeLibsProtected()
