@@ -19,11 +19,17 @@ readonly CMD_TASK="$1"
 readonly DIR_TASK="$( cd "$( dirname "$0" )" >/dev/null && pwd )"
 if [ -n "$CMD_TASK" ]; then shift; fi
 
-# The tor release external/tor must be at. Checked after every `git submodule update`, which
-# resets the submodule to the commit in the index: a tor bump that isn't staged (or committed)
-# fails here, instead of silently building the old tor. Update together with the submodule.
-readonly TOR_TAG="tor-0.4.9.16"
-readonly TOR_COMMIT="c51547ca15ea665950dd154e160051c57f5719db"
+# The release each submodule in external/ must be at: <name> <tag> <commit>. Checked after every
+# `git submodule update`, which resets submodules to the commits in the index: a bump that isn't
+# staged (or committed) fails here, instead of silently building the old version. Update together
+# with the submodule.
+readonly SUBMODULES_EXPECTED="
+libevent release-2.1.12-stable 5df3037d10556bfcb675bc73e516978b75fc7bc7
+openssl openssl-3.5.9 45e844fa2a14ec92d146bd8f5778ac130b6625fb
+tor tor-0.4.9.16 c51547ca15ea665950dd154e160051c57f5719db
+xz v5.8.4 d3e650e63c110e830fd5391e7f8b45df0b91d3da
+zlib v1.3.2 da607da739fa6047df13e66a2af6b8bec7c2a498
+"
 
 function build:all { ## Builds all targets
   build:all:linux-libc
@@ -255,16 +261,25 @@ function validate:update_hashes { ## Updates gradle extensions with new hash val
   validate
 }
 
-function __require:tor:commit {
-  local commit=
-  commit="$(${GIT} -C "$DIR_TASK/tor" rev-parse HEAD)"
-  if [ "$commit" = "$TOR_COMMIT" ]; then return 0; fi
+function __require:submodule:commits {
+  local name=
+  for name in "$@"; do
+    local expected=
+    expected="$(echo "$SUBMODULES_EXPECTED" | awk -v n="$name" '$1 == n { print $2 " " $3 }')"
+    __util:require:not_empty "$expected" "No expected commit for submodule $name in SUBMODULES_EXPECTED"
 
-  __util:error "external/tor is at $commit, expected $TOR_TAG ($TOR_COMMIT)
+    local tag="${expected% *}"
+    local commit_expected="${expected#* }"
+    local commit=
+    commit="$(${GIT} -C "$DIR_TASK/$name" rev-parse HEAD)"
+    if [ "$commit" = "$commit_expected" ]; then continue; fi
+
+    __util:error "external/$name is at $commit, expected $tag ($commit_expected)
 
     git submodule update checks out the commit recorded in the index. If you moved
-    external/tor, stage it first (git add external/tor). If you meant to bump tor,
-    update TOR_TAG and TOR_COMMIT in $DIR_TASK/task.sh"
+    external/$name, stage it first (git add external/$name). If you meant to bump it,
+    update SUBMODULES_EXPECTED in $DIR_TASK/task.sh"
+  done
 }
 
 # Run
@@ -288,7 +303,7 @@ else
     __util:require:cmd "$GIT" "git"
 
     ${GIT} submodule update --init
-    __require:tor:commit
+    __require:submodule:commits libevent openssl tor xz zlib
 
     __util:require:no_build_lock
     trap '__build:cleanup' EXIT
@@ -309,7 +324,7 @@ else
     __util:require:cmd "$GIT" "git"
 
     ${GIT} submodule update --init "$DIR_TASK/tor"
-    __require:tor:commit
+    __require:submodule:commits tor
     __util:git:clean "tor"
 
     __util:require:no_build_lock
