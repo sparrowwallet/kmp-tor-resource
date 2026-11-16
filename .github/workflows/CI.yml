@@ -2,6 +2,11 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      sign_macos:
+        description: Sign and notarize the macOS output, and upload its detached signatures
+        type: boolean
+        default: false
   push:
 
 jobs:
@@ -155,3 +160,172 @@ jobs:
         run: |
           echo "# https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-redirection#how-to-redirect-dlls-for-unpackaged-apps" > tor-out/tor.exe.local
           ./tor-out/tor.exe --version
+
+  # Signs the macOS output with Sparrow's Developer ID (hardened runtime), notarizes it, and uploads the
+  # detached signatures (diff-cli) to commit under external/codesign/tor-gpl/macos-lts/<arch>/.
+  # Run by hand (workflow_dispatch with sign_macos), only when the macOS binaries change.
+  sign-macos:
+    name: sign macos-lts
+    needs: [build, macos-smoke]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_macos }}
+    runs-on: macos-15
+    permissions:
+      contents: read
+    env:
+      UNSIGNED: ${{ github.workspace }}/unsigned
+      SIGNED: ${{ github.workspace }}/signed
+      SIGNATURES: ${{ github.workspace }}/external/codesign/tor-gpl/macos-lts
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # For ./tooling diff-cli (Gradle)
+      - name: Set Up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Download Output aarch64
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-aarch64
+          path: unsigned/aarch64
+
+      - name: Download Output x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-x86_64
+          path: unsigned/x86_64
+
+      # As in Sparrow's codesign-macos action.
+      - name: Set Up Signing Keychain
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+          # The Developer ID Application identity of the notarization team
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "Developer ID Application: .*($TEAM_ID)\"" | head -n 1 | awk '{ print $2 }')"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::No 'Developer ID Application' identity for team $TEAM_ID in MACOS_CERTIFICATE"
+            exit 1
+          fi
+          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      # --force replaces the linker's ad-hoc signature on the arm64 tor (next step 3).
+      # libtor.dylib and tor must be signed by the same team: hardened runtime's library validation.
+      - name: Sign
+        env:
+          TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        run: |
+          cp -R "$UNSIGNED" "$SIGNED"
+          for arch in aarch64 x86_64; do
+            for file in libtor.dylib tor; do
+              codesign --force --options runtime --timestamp --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" "$SIGNED/$arch/$file"
+              codesign --verify --strict --verbose=2 "$SIGNED/$arch/$file"
+              info="$(codesign --display --verbose=2 "$SIGNED/$arch/$file" 2>&1)"
+              echo "$info" | grep -E '^(Identifier|Format|CodeDirectory|TeamIdentifier|Timestamp)'
+              echo "$info" | grep -qx "TeamIdentifier=$TEAM_ID" || { echo "::error::$arch/$file: wrong team"; exit 1; }
+              echo "$info" | grep -q 'flags=.*(runtime)' || { echo "::error::$arch/$file: no hardened runtime"; exit 1; }
+            done
+          done
+
+      # A zip of the bare binaries: notarization records every signature in it, and the detached
+      # signatures don't depend on stapling (which can't be applied to a bare Mach-O file anyway).
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+          PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent "$SIGNED" "$RUNNER_TEMP/tor-macos.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/tor-macos.zip" --wait --timeout 30m --output-format json \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$PASSWORD" > notary-result.json
+          cat notary-result.json
+          id="$(jq -r '.id' notary-result.json)"
+          xcrun notarytool log "$id" --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$PASSWORD" notary-log.json
+          cat notary-log.json
+          if [ "$(jq -r '.status' notary-result.json)" != "Accepted" ]; then
+            echo "::error::Notarization status: $(jq -r '.status' notary-result.json)"
+            exit 1
+          fi
+          if [ "$(jq '.issues // [] | length' notary-log.json)" != "0" ]; then
+            echo "::error::Notarization log has issues"
+            exit 1
+          fi
+
+      # macos-15 is arm64: runs the signed arm64 output as built, no ad-hoc copy.
+      - name: Run Signed tor --version
+        run: |
+          chmod +x "$SIGNED/aarch64/tor"
+          "$SIGNED/aarch64/tor" --version
+
+      - name: Create Detached Signatures
+        run: |
+          for arch in aarch64 x86_64; do
+            mkdir -p "$SIGNATURES/$arch"
+            for file in libtor.dylib tor; do
+              rm -f "$SIGNATURES/$arch/$file.signature"
+              ./tooling diff-cli create --diff-ext-name .signature \
+                "$UNSIGNED/$arch/$file" "$SIGNED/$arch/$file" "$SIGNATURES/$arch"
+            done
+          done
+
+      # Each signature must turn the unsigned file into the signed one, byte for byte.
+      - name: Check Detached Signatures
+        run: |
+          check="$RUNNER_TEMP/check"
+          for arch in aarch64 x86_64; do
+            for file in libtor.dylib tor; do
+              rm -rf "$check" && mkdir -p "$check"
+              cp "$UNSIGNED/$arch/$file" "$check/$file"
+              ./tooling diff-cli apply "$SIGNATURES/$arch/$file.signature" "$check/$file"
+              cmp "$check/$file" "$SIGNED/$arch/$file"
+              echo "$arch/$file.signature OK"
+            done
+          done
+          {
+            echo "### macOS detached signatures"
+            echo '```'
+            (cd "$UNSIGNED" && shasum -a 256 aarch64/libtor.dylib aarch64/tor x86_64/libtor.dylib x86_64/tor | sed 's/^/unsigned /')
+            (cd "$SIGNED" && shasum -a 256 aarch64/libtor.dylib aarch64/tor x86_64/libtor.dylib x86_64/tor | sed 's/^/signed   /')
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Detached Signatures
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-lts-signatures
+          path: external/codesign/tor-gpl/macos-lts/
+          if-no-files-found: error
+
+      - name: Upload Notarization Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-lts-notarization
+          path: |
+            notary-result.json
+            notary-log.json
+          if-no-files-found: ignore
+
+      - name: Delete Signing Keychain
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
