@@ -52,8 +52,8 @@ VERSION_NAME="<version name>"   # e.g. 409.16.0
 git checkout master
 git pull
 git add --all
-git commit -S -m "Prepare $VERSION_NAME release"
-git tag -s "$VERSION_NAME" -m "Release v$VERSION_NAME"
+git commit -m "Prepare $VERSION_NAME release"
+git tag "$VERSION_NAME"
 git push
 git push origin "$VERSION_NAME"
 ```
@@ -117,7 +117,7 @@ done
   commit and push
 ```
 git add gradle.properties
-git commit -S -m "Prepare for next development iteration"
+git commit -m "Prepare for next development iteration"
 git push
 ```
 

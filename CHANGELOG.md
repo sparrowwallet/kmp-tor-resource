@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Version 409.16.0 (unreleased)
+## Version 409.16.0 (2026-11-16)
 
 First release of the Sparrow fork, published as `com.sparrowwallet`. Earlier versions below are upstream's
 (`io.matthewnelson.kmp-tor`).
