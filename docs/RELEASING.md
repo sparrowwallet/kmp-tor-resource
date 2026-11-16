@@ -1,209 +1,124 @@
 # Releasing
 
-### Linux
+Releases are published to Maven Central as `com.sparrowwallet:resource-exec-tor-gpl` (with `resource-lib-tor-gpl`
+and `resource-geoip`), JVM only. CI builds, signs (macOS), packages and validates the release commit. Publishing
+runs on the Mac, from CI's packaged resources: the Mac has no Docker, so it doesn't package itself.
 
-- Ensure java version is greater than or equal to 17
+Why this is safe: CI's `package` job packages the five targets with the committed detached signatures, and fails
+unless every packaged resource matches its validation hash in `build-logic/src/main/kotlin/resource/validation/`.
+On the Mac, `verifyResourceValidation` runs before any publish task and fails unless the same hashes match. A
+mismatch would otherwise make Gradle silently build with the mock resources from `mock-resources/`.
+
+### Before the release
+
+- If tor or a bundled library changed since the last release, follow [UPDATING.md](UPDATING.md) first: build,
+  sign (macOS in CI, Windows with Jsign), package and regenerate the validation hashes.
+- `master` is green in CI, including `package and validate`.
+
+### One-time setup (macOS)
+
+- A JDK between 17 and 24 to run Gradle, and JDK 11 installed (the `module-info` compile uses a JDK 11 toolchain,
+  found under `/Library/Java/JavaVirtualMachines`)
 ```
 java --version
+/usr/libexec/java_home -V
 ```
 
-- Validate compilations (there should be no errors)
+- `gh` logged in, to download the CI artifact
 ```
-./external/task.sh validate:all
-```
-
-- Set ssh variables in terminal shell
-```
-SSH_MAC_PROFILE="<profile name>"
-SSH_MAC_PATH="/Users/path/on/mac/to/kmp-tor-resource"
+gh auth status
 ```
 
-- Copy compilations to `macOS` box via ssh for publication
+- `~/.gradle/gradle.properties` holds the Maven Central Portal credentials and the GPG signing config used for
+  Sparrow's other `com.sparrowwallet` artifacts
 ```
-cd external && tar c build | ssh $SSH_MAC_PROFILE "cd $SSH_MAC_PATH/external; rm -rf build; tar x -" && cd ..
-```
-
-### macOS
-
-- Ensure java version is greater than or equal to 17
-```
-java --version
+mavenCentralUsername=<token username>
+mavenCentralPassword=<token password>
+signing.keyId=...
 ```
 
-- Sign a random `.txt` file (gpg tty for YubiKey PIN + gradle build don't mix)
+### Release commit
+
+- In a `bash` shell, set the version
 ```
-gpg --sign --armor --detach ~/Documents/hello.txt
+VERSION_NAME="<version name>"   # e.g. 409.16.0
 ```
 
-- Ensure you are in a `bash` shell
-```
-bash
-```
+- Update `VERSION_NAME` (remove `-SNAPSHOT`) in the root `gradle.properties`, update `CHANGELOG.md`, and the
+  version in `README.md`
 
-- Set version variable in terminal shell
-```
-VERSION_NAME="<version name>"
-```
-
-- Create a release branch
+- Commit, tag and push
 ```
 git checkout master
 git pull
-git checkout -b release_"$VERSION_NAME"
-```
-
-- Validate compilations (there should be no errors)
-```
-./external/task.sh validate:all
-```
-
-- Ensure that credentials for `Npmjs` are set in `~/.gradle/gradle.properties`
-```
-NPMJS_AUTH_TOKEN=<auth token>
-```
-
-- Ensure that credentials for `Maven Central` are set in `~/.gradle/gradle.properties`
-```
-mavenCentralUsername=MyUserName
-mavenCentralPassword=MyPassword
-```
-
-- Ensure that the proper GPG gradle config are set in `~/.gradle/gradle.properties` for signing
-```
-signing.keyId=MyGPGKeyId
-signing.password=MyGPGKeyPassword
-signing.secretKeyRingFile=/path/to/.gnupg/MyGPGKey.gpg
-```
-
-- Update `VERSION_NAME` (remove `-SNAPSHOT`) and `VERSION_CODE` in root project's `gradle.properties` file
-
-- Set `NPMJS_SNAPSHOT_VERSION` to `0` in root project's `gradle.properties` file
-
-- Update `version` in project's `README.md` documentation
-
-- Update `version` in project's `docs/DETERMINISTIC_BUILDS.md` documentation
-
-- Update `version` in project's `library/resource-filterjar-gradle-plugin/README.md` documentation
-
-- Update `version` in project's `library/resource-frameworks-gradle-plugin/README.md` documentation
-
-- Update `CHANGELOG.md`
-
-- Clean
-```
-./gradlew clean
-```
-
-- Perform a dry run of the publication
-```
-NPMJS_PUBLISH_TASKS=$(./gradlew tasks | grep "ToNpmjsRegistry" | cut -d ' ' -f 1)
-./gradlew $NPMJS_PUBLISH_TASKS --no-daemon --no-parallel -PNPMJS_DRY_RUN
-```
-
-- Inspect the terminal output to ensure:
-    - `README.md` is present
-    - `index.js` is present
-    - geoip files should be about `2MB` each
-    - tor files should be about `3MB` each
-
-- Publish to `Npmjs`
-```
-./gradlew $NPMJS_PUBLISH_TASKS --no-daemon --no-parallel
-```
-
-- Update `.kotlin-js-store/{js/wasm}/yarn.lock` files
-```
-./gradlew kotlinUpgradeYarnLock
-./gradlew kotlinWasmUpgradeYarnLock
-```
-
-- Verify that `.kotlin-js-store/yarn.lock` is using the release 
-  publication dependency (should not be using `SNAPSHOT` version).
-```
-cat .kotlin-js-store/js/yarn.lock | grep "kmp-tor.resource" | grep "@"
-cat .kotlin-js-store/wasm/yarn.lock | grep "kmp-tor.resource" | grep "@"
-```
-
-- Commit Changes
-```
 git add --all
 git commit -S -m "Prepare $VERSION_NAME release"
 git tag -s "$VERSION_NAME" -m "Release v$VERSION_NAME"
-```
-
-- Perform a clean build
-```
-./gradlew clean -DKMP_TARGETS_ALL
-./gradlew build --no-build-cache -DKMP_TARGETS_ALL
-```
-
-- Publish
-```
-./gradlew publishAllPublicationsToMavenCentralRepository --no-daemon --no-parallel -DKMP_TARGETS_ALL
-```
-
-- The [gradle-maven-publish-plugin](https://github.com/vanniktech/gradle-maven-publish-plugin) should have automatically
-  closed the staged repositories, but if it did not:
-    - Close publications (Don't release yet)
-        - Login to Central Portal: [central.sonatype.com](https://central.sonatype.com/publishing/deployments)
-        - Click on **Staging Repositories**
-        - Select all Publications
-        - Click **Close** then **Confirm**
-        - Wait a bit, hit **Refresh** until the *Status* changes to *Closed*
-
-- Check Publication
-```
-./gradlew clean -PCHECK_PUBLICATION -DKMP_TARGETS_ALL
-./gradlew :tools:check-publication:build --refresh-dependencies -PCHECK_PUBLICATION -DKMP_TARGETS_ALL
-```
-
-- **Release** publications from Central Portal UI at [central.sonatype.com](https://central.sonatype.com/publishing/deployments)
-
-- Merge release branch to `master`
-```
-git checkout master
-git pull
-git merge --no-ff -S release_"$VERSION_NAME"
-```
-
-- Update `VERSION_NAME` (add `-SNAPSHOT`) and `VERSION_CODE` in root project's `gradle.properties` file
-
-- Update `.kotlin-js-store/{js/wasm}/yarn.lock`
-```
-./gradlew clean
-./gradlew kotlinUpgradeYarnLock
-./gradlew kotlinWasmUpgradeYarnLock
-```
-
-- Verify that `.kotlin-js-store/yarn.lock` is using the `SNAPSHOT` publications
-```
-cat .kotlin-js-store/js/yarn.lock | grep "kmp-tor.resource" | grep "@"
-cat .kotlin-js-store/wasm/yarn.lock | grep "kmp-tor.resource" | grep "@"
-```
-
-- Commit changes
-```
-git add --all
-git commit -S -m "Prepare for next development iteration"
-```
-
-- Push Changes
-```
 git push
-```
-
-- Push Tag
-```
 git push origin "$VERSION_NAME"
 ```
 
-- Delete local release branch
-```bash
-git branch -D release_"$VERSION_NAME"
-git fetch origin --prune
+- Wait for the CI run on the release commit to finish green, in particular `package and validate`, and note its
+  run ID
+```
+gh run list --workflow CI.yml --commit "$(git rev-parse HEAD)"
+RUN_ID="<run id>"
 ```
 
-- Wait for releases to become available on [MavenCentral](https://repo1.maven.org/maven2/io/matthewnelson/kotlin-components/)
-- Draft new release on GitHub
-    - Enter the release name <VersionName> as tag and title
-    - Have the description point to the changelog
+### Publish (macOS)
+
+- If GPG asks for a YubiKey PIN, sign something first: the PIN prompt and the Gradle build don't mix
+```
+echo test | gpg --sign --armor > /dev/null
+```
+
+- Start clean, then download CI's packaged resources and jars, and put the resources in place
+```
+./gradlew clean
+DIR_DL="$(mktemp -d)"
+gh run download "$RUN_ID" -n package -D "$DIR_DL"
+rm -rf external/build/package
+mkdir -p external/build
+cp -R "$DIR_DL/external/build/package" external/build/
+```
+
+- Build the jars and check they match CI's, byte for byte (same commit, same compiler and resources)
+```
+./gradlew verifyResourceValidation \
+  :library:resource-exec-tor-gpl:jvmJar :library:resource-lib-tor-gpl:jvmJar :library:resource-geoip:jvmJar
+for m in resource-exec-tor-gpl resource-lib-tor-gpl resource-geoip; do
+  shasum -a 256 "library/$m/build/libs/$m-jvm-$VERSION_NAME.jar" "$DIR_DL/library/$m/build/libs/$m-jvm-$VERSION_NAME.jar"
+done
+```
+  If they differ, stop and compare the jar contents. A difference in `META-INF/versions/9/module-info.class` only
+  points at a different JDK 11 build on the two machines.
+
+- Publish (don't add `clean` here: it deletes the validation reports, and `verifyResourceValidation` then refuses)
+```
+./gradlew publishAllPublicationsToMavenCentralRepository --no-daemon --no-parallel
+```
+
+- Check the deployment on the Central Portal ([central.sonatype.com](https://central.sonatype.com/publishing/deployments)):
+  it should be *Validated*, with the three modules' root and `-jvm` publications
+
+- Check the publication resolves (reads the deployment with the Maven Central credentials)
+```
+./gradlew clean -PCHECK_PUBLICATION
+./gradlew :tools:check-publication:build --refresh-dependencies -PCHECK_PUBLICATION
+```
+
+- **Release** the deployment from the Central Portal UI
+
+### After the release
+
+- Update `VERSION_NAME` to the next `-SNAPSHOT` (e.g. `409.16.1-SNAPSHOT`) in the root `gradle.properties`, then
+  commit and push
+```
+git add gradle.properties
+git commit -S -m "Prepare for next development iteration"
+git push
+```
+
+- Wait for the release on [Maven Central](https://repo1.maven.org/maven2/com/sparrowwallet/resource-exec-tor-gpl/)
+
+- Draft a GitHub release for the tag, with the changelog
