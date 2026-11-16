@@ -1,6 +1,11 @@
 # UPDATING
 
-1) Update git submodules in `external` to desired tags
+1) Update git submodules in `external` to desired tags, then:
+   - Update `SUBMODULES_EXPECTED` in `external/task.sh` with each new tag and commit. Builds stop if a submodule
+     isn't at the listed commit.
+   - Stage the moved submodules (`git add external/<name>`) before building: `task.sh` runs
+     `git submodule update`, which resets submodules to the commits in the index.
+   - Check the patches in `external/patches/` still apply (`git -C external/<name> apply --check ../patches/<name>/*.patch`).
 
 2) Update version strings in `README.md`
 
@@ -23,7 +28,8 @@
      unsigned build from step 4):
      1. Get the unsigned `tor.exe` and `tor.dll`: the `mingw-x86_64` artifact of a CI run of the commit being
         released, or `external/build/out/tor-gpl/mingw/x86_64/` from step 4. They're byte-identical.
-     2. Sign both files with Jsign, with a timestamp.
+     2. Sign both files with Jsign, with a timestamp, embedding the full certificate chain (`--certfile` with
+        the leaf certificate and the SSL.com intermediate). Sign fresh unsigned copies, never already-signed files.
      3. Copy the two signed files into a directory of their own on the Linux machine, and import them:
         ```shell
         ./external/task.sh sign:mingw:import /path/to/dir/with/signed/files

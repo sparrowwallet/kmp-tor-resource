@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## Version 409.16.0 (unreleased)
+
+First release of the Sparrow fork, published as `com.sparrowwallet`. Earlier versions below are upstream's
+(`io.matthewnelson.kmp-tor`).
+
+ - Updates `tor` to `tor-0.4.9.16`
+ - Updates `openssl` to `openssl-3.5.9`, `xz` to `v5.8.4` and `zlib` to `v1.3.2`
+ - JVM only, GPL only (`resource-exec-tor-gpl`, `resource-lib-tor-gpl`, `resource-geoip`), for `linux-libc`
+   `aarch64`/`x86_64`, `macOS` `aarch64`/`x86_64` and `mingw` `x86_64`
+ - Removes the Android, iOS, Kotlin/Native and JavaScript/npm publications, the `noexec` and non-GPL variants, and
+   the `@InternalKmpTorApi` `configureNoExecTorResource` from `resource-lib-tor-gpl`
+ - Builds with toolchain images built from `build-env/` in this repository, pinned by digest
+ - Signs the macOS binaries with Sparrow's Developer ID (notarized), and the Windows binaries with Craig Raw's
+   code signing certificate
+
 ## Version 409.5.0 (2026-02-15)
  - Updates `tor` to `tor-0.4.9.5` [[#191]][191]
 
