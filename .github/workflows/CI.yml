@@ -164,15 +164,19 @@ jobs:
   # Signs the macOS output with Sparrow's Developer ID (hardened runtime), notarizes it, and uploads the
   # signed binaries. Run by hand (workflow_dispatch with sign_macos), only when the macOS binaries change.
   #
-  # This is the only job with the signing secrets. It doesn't check out the repository and runs no Gradle
-  # or Java; the only code it runs from this repo's build is the signed tor, after the keychain is deleted.
+  # This is the only job with the signing secrets. It doesn't check out the repository and runs no Gradle,
+  # Java or code from this repo's build.
   # No action runs while the keychain exists: artifacts are downloaded before the keychain is created,
   # and uploaded after it's deleted. Actions are pinned by commit SHA.
+  #
+  # Runs on Intel: codesign and notarytool sign the arm64 binaries the same way there, and GitHub's
+  # macOS arm64 runners repeatedly weren't available (jobs cancelled after 15 minutes unassigned).
+  # The signed arm64 run is the separate macos-signed-arm64 job, so it doesn't gate the signatures.
   sign-macos:
     name: sign macos-lts
     needs: [build, macos-smoke]
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_macos }}
-    runs-on: macos-15
+    runs-on: macos-15-intel
     # Artifacts of this run need no token permissions.
     permissions: {}
     env:
@@ -278,12 +282,6 @@ jobs:
             exit 1
           fi
 
-      # macos-15 is arm64: runs the signed arm64 output as built, no ad-hoc copy.
-      - name: Run Signed tor --version
-        run: |
-          chmod +x "$SIGNED/aarch64/tor"
-          "$SIGNED/aarch64/tor" --version
-
       - name: Upload Signed Output
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -300,6 +298,27 @@ jobs:
             notary-result.json
             notary-log.json
           if-no-files-found: ignore
+
+  # No secrets. Runs the signed arm64 output as built (no ad-hoc copy) on Apple Silicon: library
+  # validation between the signed tor and libtor.dylib. Doesn't gate the signatures; if no arm64
+  # runner is available, rerun this job on its own later.
+  macos-signed-arm64:
+    name: smoke signed macos-lts-aarch64
+    needs: sign-macos
+    runs-on: macos-15
+    permissions: {}
+    steps:
+      - name: Download Signed Output
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-signed
+          path: signed
+
+      # Artifacts don't keep file modes.
+      - name: Run Signed tor --version
+        run: |
+          chmod +x signed/aarch64/tor
+          signed/aarch64/tor --version
 
   # No secrets. Runs the signed x86_64 output on Intel (library validation between the signed tor and
   # libtor.dylib; sign-macos runs arm64), then creates the detached signatures with diff-cli (Gradle) and
