@@ -18,6 +18,12 @@ set -e
 readonly DIR_TASK=$( cd "$( dirname "$0" )" >/dev/null && pwd )
 readonly FILE_BUILD_LOCK="$DIR_TASK/build/.lock"
 readonly ORG="ghcr.io/sparrowwallet/build-env"
+readonly FILE_DIGESTS="$DIR_TASK/digests"
+# Holds the macOS SDK tarball(s) for base.macos*, passed to docker build as the 'macos_sdk' build context.
+# The SDK isn't redistributable, so it comes from a private mirror (see .github/workflows/build-env.yml).
+readonly DIR_MACOS_SDK="$DIR_TASK/build/macos-sdk"
+# Images built by this run of task.sh, so a task covering several targets builds each shared base once.
+BUILT_THIS_RUN=""
 
 # Programs
 readonly DOCKER=$(which docker)
@@ -65,6 +71,11 @@ function build:all:macos { ## Builds all macOS containers
   build:macos-lts:x86_64
   build:macos:aarch64
   build:macos:x86_64
+}
+
+function build:all:macos-lts { ## Builds all macOS (SDK 12.3) containers
+  build:macos-lts:aarch64
+  build:macos-lts:x86_64
 }
 
 function build:all:mingw { ## Builds all MinGW containers
@@ -397,15 +408,21 @@ function __exec:docker:assemble {
       base_build_args+="|VERSION_DARWIN=21.4"
       base_build_args+="|VERSION_MIN=10.9"
       base_build_args+="|VERSION_SDK=12.3"
+      local sdk_file="MacOSX12.3.sdk.tar.gz"
     else
       base_build_args+="|SDK_SHA256=bc6edbf45c09772f4bbe2324975d1ff708c915df8ae2cfa97ef99bac6886fb0a"
       base_build_args+="|SDK_TAR_COMPRESSION=xz"
       base_build_args+="|VERSION_DARWIN=24.4"
       base_build_args+="|VERSION_MIN=10.13"
       base_build_args+="|VERSION_SDK=15.4"
+      local sdk_file="MacOSX15.4.sdk.tar.xz"
     fi
+    if ! __exec:docker:is_pinned "base.${tag_suffix}"; then
+      __require:file_exists "$DIR_MACOS_SDK/$sdk_file" "macOS SDK tarball (copy it from the private mirror)"
+    fi
+    local build_context="macos_sdk=$DIR_MACOS_SDK"
     __exec:docker:build "base/darwin/macos" "base.${tag_suffix}" "base/darwin/macos" "$base_build_args"
-    unset base_build_args
+    unset base_build_args build_context sdk_file
   fi
 
   if [ "$os_name" = "mingw" ]; then
@@ -432,18 +449,63 @@ function __exec:docker:build {
     _cmd+=" --build-arg $_build_arg"
   done
 
+  if [ -n "$build_context" ]; then
+    _cmd+=" --build-context $build_context"
+  fi
+
   _cmd+=" -t $ORG.$2"
   _cmd+=" $DIR_TASK/src/$3"
+
+  if __exec:docker:is_pinned "$2"; then
+    echo "
+    Skipping $ORG.$2: local :latest is the pinned $(__exec:docker:pinned_digest "$2")
+  "
+    return 0
+  fi
+
+  # Not all steps hit the build cache when rebuilt (e.g. base.macos* bind-mounts the SDK from a named
+  # build context), so a second build could produce a different image from the one already built on.
+  if echo " $BUILT_THIS_RUN " | grep -qF " $2 "; then
+    echo "
+    Skipping $ORG.$2: already built by this run
+  "
+    return 0
+  fi
 
   echo "
     $_cmd
   "
   ${_cmd}
+  BUILT_THIS_RUN+=" $2"
+}
+
+# Prints the digest pinned for image suffix $1 in the digests file (empty if missing).
+function __exec:docker:pinned_digest {
+  awk -F '=' -v name="$1" '$1 == name { print $2 }' "$FILE_DIGESTS"
+}
+
+# True only if $ORG.$1:latest exists locally and was pulled by (or pushed as) the digest pinned
+# in the digests file. A local build has no RepoDigests entry until it's pushed, so a stale
+# :latest from an earlier build never matches and is rebuilt.
+function __exec:docker:is_pinned {
+  local _digest=
+  _digest="$(__exec:docker:pinned_digest "$1")"
+  if ! echo "$_digest" | grep -qE '^sha256:[0-9a-f]{64}$'; then
+    return 1
+  fi
+
+  ${DOCKER} image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ORG.$1:latest" 2>/dev/null \
+    | grep -qFx "$ORG.$1@$_digest"
 }
 
 function __require:cmd {
   if [ -f "$1" ]; then return 0; fi
   __error "$2 is required to run this script"
+}
+
+function __require:file_exists {
+  if [ -f "$1" ]; then return 0; fi
+  __error "$2 not found at $1"
 }
 
 function __require:var_set {

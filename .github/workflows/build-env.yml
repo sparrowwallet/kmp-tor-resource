@@ -2,16 +2,53 @@ name: build-env
 
 # Builds the toolchain images from build-env/ and pushes them to GHCR. Run by hand.
 # The digests it prints go into build-env/digests, which pins every image the build uses.
+#
+# Each job first pulls the images already pinned in build-env/digests and tags them :latest.
+# build-env/task.sh then skips those and builds only the images whose line is still a placeholder,
+# and only those are pushed. With every line pinned, a run builds and pushes nothing.
 
 on:
   workflow_dispatch:
 
+env:
+  # Private package holding only the macOS SDK tarball (Apple's licence doesn't appear to allow redistributing it).
+  # Its sha256 is checked in build-env/src/base/darwin/macos/Dockerfile.
+  MACOS_SDK_IMAGE: ghcr.io/sparrowwallet/build-env.macos-sdk:12.3
+  MACOS_SDK_FILE: MacOSX12.3.sdk.tar.gz
+
 jobs:
-  linux-libc-x86_64:
+  build-env:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # require: shared base images, which must already be pinned (they're never rebuilt here, as
+          #          parallel jobs would each build and push a different one).
+          # images:  this job's own images, built and pushed if their line is still a placeholder.
+          - name: linux-libc-x86_64
+            require: base staging.crosstool
+            images: linux-libc.x86_64
+            task: build:linux-libc:x86_64
+          - name: linux-libc-aarch64
+            require: base staging.crosstool
+            images: linux-libc.aarch64
+            task: build:linux-libc:aarch64
+          # Only this job sees the SDK. base.darwin has no SDK and is public; base.macos-lts and
+          # macos-lts.* contain it and go to packages created private by hand.
+          - name: macos-lts
+            require: base
+            images: base.darwin base.macos-lts macos-lts.aarch64 macos-lts.x86_64
+            task: build:all:macos-lts
+            macos_sdk: true
+          - name: mingw-x86_64
+            require: base
+            images: base.mingw mingw.x86_64
+            task: build:mingw:x86_64
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -19,29 +56,46 @@ jobs:
       - name: Log In To GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Pull Pinned Images
+        run: |
+          ./.github/workflows/build_env_images.sh require ${{ matrix.require }}
+          ./.github/workflows/build_env_images.sh pull ${{ matrix.images }}
+
+      # Only needed while base.macos-lts is unpinned. The tarball stays on this runner: it's
+      # git-ignored, bind-mounted into the build (never a layer of its own), and never uploaded.
+      - name: Fetch macOS SDK From Private Mirror
+        if: matrix.macos_sdk
+        run: |
+          if ./.github/workflows/build_env_images.sh pinned base.macos-lts; then
+            echo "base.macos-lts is pinned, so the SDK isn't needed"
+            exit 0
+          fi
+          docker pull "$MACOS_SDK_IMAGE"
+          mkdir -p build-env/build/macos-sdk
+          cid="$(docker create "$MACOS_SDK_IMAGE" none)"
+          docker cp "$cid:/$MACOS_SDK_FILE" build-env/build/macos-sdk/
+          docker rm "$cid"
+          docker image rm "$MACOS_SDK_IMAGE"
+
       # Plain `docker build` (no buildx container builder): each Dockerfile's FROM names the
       # previous image as :latest, which only the default builder can see from earlier in this run.
       - name: Build Images
-        run: ./build-env/task.sh build:linux-libc:x86_64
+        run: ./build-env/task.sh ${{ matrix.task }}
 
-      # The summary is written only once every image has been pushed and has a digest.
+      # The summary is written only once every new image has been pushed and has a digest.
       - name: Push Images
         run: |
-          ORG="$(sed -n 's/^readonly ORG="\(.*\)"$/\1/p' build-env/task.sh)"
-          if [ -z "$ORG" ]; then echo "::error::ORG not found in build-env/task.sh"; exit 1; fi
-
-          lines=""
-          for name in base staging.crosstool linux-libc.x86_64; do
-            digest="$(./.github/workflows/push_image.sh "$ORG.$name")"
-            lines+="$name=$digest"$'\n'
-          done
-
+          lines="$(./.github/workflows/build_env_images.sh push ${{ matrix.images }})"
           {
-            echo "### build-env digests"
+            echo "### build-env digests: ${{ matrix.name }}"
             echo ""
-            echo "Copy into \`build-env/digests\`:"
-            echo ""
-            echo '```'
-            printf '%s' "$lines"
-            echo '```'
+            if [ -z "$lines" ]; then
+              echo "Nothing new: every image was already pinned."
+            else
+              echo "Copy into \`build-env/digests\`:"
+              echo ""
+              echo '```'
+              echo "$lines"
+              echo '```'
+            fi
           } | tee -a "$GITHUB_STEP_SUMMARY"

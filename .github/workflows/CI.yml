@@ -5,46 +5,90 @@ on:
   push:
 
 jobs:
-  linux-libc-x86_64:
+  build:
+    name: build ${{ matrix.target }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-libc, arch: x86_64,  files: tor libtor.so }
+          - { target: linux-libc, arch: aarch64, files: tor libtor.so }
+          - { target: macos-lts,  arch: aarch64, files: tor libtor.dylib }
+          - { target: macos-lts,  arch: x86_64,  files: tor libtor.dylib }
+          - { target: mingw,      arch: x86_64,  files: tor.exe tor.dll }
     env:
-      OUT: external/build/out/tor-gpl/linux-libc/x86_64
+      OUT: external/build/out/tor-gpl/${{ matrix.target }}/${{ matrix.arch }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       # The build-env images are pulled by the digests in build-env/digests.
+      # base.macos-lts and macos-lts.* are private packages that grant this repo access.
       - name: Log In To GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build
-        run: ./external/task.sh build:linux-libc:x86_64
+        run: ./external/task.sh build:${{ matrix.target }}:${{ matrix.arch }}
 
       - name: Record Hashes
         run: |
           {
-            echo "### linux-libc x86_64 output"
+            echo "### ${{ matrix.target }} ${{ matrix.arch }} output"
             echo '```'
-            (cd "$OUT" && sha256sum tor libtor.so)
+            (cd "$OUT" && sha256sum ${{ matrix.files }})
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Check glibc
+        if: matrix.target == 'linux-libc'
         run: ./.github/workflows/glibc_check.sh 2.23 "$OUT/tor" "$OUT/libtor.so"
 
-      - name: Run tor --version On Ubuntu 20.04
-        run: docker run --rm -v "$GITHUB_WORKSPACE/$OUT:/tor:ro" ubuntu:20.04 /tor/tor --version
+      # Unsigned. macOS and MinGW output isn't signed, smoke tested or packaged yet.
+      - name: Upload Output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-${{ matrix.arch }}
+          path: ${{ env.OUT }}/
+          if-no-files-found: error
 
-      - name: Upload Build Logs And Output
+      - name: Upload Build Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: linux-libc-x86_64
+          name: ${{ matrix.target }}-${{ matrix.arch }}-logs
           path: |
-            external/build/stage/linux-libc/x86_64/build.sh
-            external/build/stage/linux-libc/x86_64/*/logs/**
-            external/build/out/tor-gpl/linux-libc/x86_64/**
+            external/build/stage/${{ matrix.target }}/${{ matrix.arch }}/build.sh
+            external/build/stage/${{ matrix.target }}/${{ matrix.arch }}/*/logs/**
           if-no-files-found: warn
+
+  # Runs the build output on the glibc floor, natively on each architecture (no QEMU).
+  linux-smoke:
+    name: smoke linux-libc-${{ matrix.arch }}
+    needs: build
+    # Also runs if another target failed; the download fails if this architecture's build did.
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64,  runner: ubuntu-latest }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Download Output
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-libc-${{ matrix.arch }}
+          path: tor-out
+
+      # Artifacts don't keep file modes.
+      - name: Run tor --version On Ubuntu 20.04
+        run: |
+          chmod +x tor-out/tor
+          docker run --rm -v "$PWD/tor-out:/tor:ro" ubuntu:20.04 /tor/tor --version

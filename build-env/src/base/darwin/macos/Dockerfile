@@ -29,13 +29,16 @@ ENV BUILD_ENV_SYSROOT=${CROSS_ROOT}/macports/pkgs
 
 ENV PATH=${CROSS_BIN}:${PATH}
 
-RUN mkdir -p /build \
+# The SDK isn't redistributable, so it isn't downloaded: it comes from the 'macos_sdk' build context
+# (docker build --build-context macos_sdk=<dir>, set by task.sh), bind-mounted so it's never a layer of its own.
+RUN --mount=type=bind,from=macos_sdk,target=/macos_sdk \
+    mkdir -p /build \
     && cd /build \
     && git clone https://github.com/tpoechtrager/osxcross.git \
     && cd osxcross \
     && git checkout ${GIT_HASH_OSXCROSS} \
     && cd tarballs \
-    && curl -O https://raw.githubusercontent.com/05nelsonm/build-env/sdk/macos/MacOSX${VERSION_SDK}.sdk.tar.${SDK_TAR_COMPRESSION} \
+    && cp /macos_sdk/MacOSX${VERSION_SDK}.sdk.tar.${SDK_TAR_COMPRESSION} . \
     && if [ "$(sha256sum MacOSX${VERSION_SDK}.sdk.tar.${SDK_TAR_COMPRESSION} | cut -d ' ' -f 1)" != "${SDK_SHA256}" ]; then exit 1; fi \
     && cd .. \
     && sed -i 's+build_xar+# build_xar+' build.sh \
