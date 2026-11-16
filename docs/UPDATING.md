@@ -16,10 +16,23 @@
    ```
 
 5) Generate code signatures
-   ```shell
-   ./external/task.sh sign:mingw
-   ./external/task.sh sign:macos "<yubikey slot>" "</path/to/api_key.json>"
-   ```
+   - macOS (signed and notarized in CI with Sparrow's Developer ID):
+     1. Run the CI workflow by hand (`workflow_dispatch`) with `sign_macos` ticked.
+     2. Unpack its `macos-lts-signatures` artifact into `external/codesign/tor-gpl/macos-lts/`, and commit it.
+   - Windows (signed locally with Jsign and a YubiKey; imported on the Linux machine, which has the
+     unsigned build from step 4):
+     1. Get the unsigned `tor.exe` and `tor.dll`: the `mingw-x86_64` artifact of a CI run of the commit being
+        released, or `external/build/out/tor-gpl/mingw/x86_64/` from step 4. They're byte-identical.
+     2. Sign both files with Jsign, with a timestamp.
+     3. Copy the two signed files into a directory of their own on the Linux machine, and import them:
+        ```shell
+        ./external/task.sh sign:mingw:import /path/to/dir/with/signed/files
+        ```
+        This writes `external/codesign/tor-gpl/mingw/x86_64/{tor.dll,tor.exe}.signature`, after checking that
+        each one turns the unsigned file into the signed one.
+     4. Commit the signatures. CI's `mingw-signed` and `windows-signed-smoke` jobs then apply them to the
+        CI-built output, check both Authenticode signatures are valid and timestamped on Windows, and run
+        the signed `tor.exe`.
 
 6) Package compilations
    ```shell

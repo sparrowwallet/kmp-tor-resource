@@ -209,33 +209,15 @@ function package:mingw { ## Packages all MinGW build/out contents
   rm -rf "$DIR_TASK/build/tor.exe.local"
 }
 
-function sign:macos { ## 2 ARGS - [1]: smartcard-slot (e.g. 9c)  [2]: /path/to/app/store/connect/api_key.json
-  if [ $# -ne 2 ]; then
-    __util:error "Usage: $0 $CMD_TASK <smartcard-slot (e.g. 9c)> /path/to/app/store/connect/api_key.json"
+function sign:mingw:import { ## 1 ARG - [1]: dir with the signed tor.exe and tor.dll (see docs/UPDATING.md)
+  if [ $# -ne 1 ]; then
+    __util:error "Usage: $0 $CMD_TASK </path/to/dir/with/signed/tor.exe/and/tor.dll>"
   fi
-
-  local hsm_pin=
-  __sign:input:hsm_pin
-  local smartcard_slot="$1"
-  local path_apikey="$2"
-  local lib_names="libtor.dylib,tor"
-
-  __sign:generate:detached:macos "aarch64"
-  __sign:generate:detached:macos "x86_64"
-}
-
-function sign:mingw { ## Codesign mingw binaries (see codesign/windows.pkcs11.sample)
-  __util:require:file_exists "codesign/windows.pkcs11" "codesign/windows.pkcs11"
-
-  . "$DIR_TASK/codesign/windows.pkcs11"
-
-  local hsm_pin=
-  __sign:input:hsm_pin
 
   local lib_names="tor.dll,tor.exe"
   local dirname_out="tor-gpl"
 
-  __sign:generate:detached:mingw "x86_64"
+  __sign:import:mingw "x86_64" "$1"
 }
 
 function validate { ## Checks the build/package directory output against expected sha256 hashes
@@ -377,7 +359,7 @@ else
   TIMEFORMAT="
     Task '$CMD_TASK' completed in %3lR
   "
-  if [ "$CMD_TASK" = "sign:macos" ]; then
+  if [ "$CMD_TASK" = "sign:mingw:import" ]; then
     time "$CMD_TASK" "$@"
   else
     time "$CMD_TASK"

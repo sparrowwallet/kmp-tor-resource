@@ -387,3 +387,115 @@ jobs:
           name: macos-lts-signatures
           path: external/codesign/tor-gpl/macos-lts/
           if-no-files-found: error
+
+  # No secrets. Applies the committed Windows detached signatures (made locally with Jsign; next step 5)
+  # to this run's unsigned MinGW output. diff-cli refuses a signature whose recorded unsigned hash
+  # doesn't match, so this also checks the signatures were made from the bytes CI builds.
+  # Skipped (with a notice) while no signatures are committed.
+  mingw-signed:
+    name: apply signatures mingw-x86_64
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      present: ${{ steps.present.outputs.present }}
+    env:
+      SIGNATURES: external/codesign/tor-gpl/mingw/x86_64
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check For Signatures
+        id: present
+        run: |
+          if [ -f "$SIGNATURES/tor.exe.signature" ] && [ -f "$SIGNATURES/tor.dll.signature" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ -e "$SIGNATURES" ]; then
+            echo "::error::$SIGNATURES must hold both tor.exe.signature and tor.dll.signature"
+            exit 1
+          else
+            echo "::notice::No Windows signatures committed yet; skipping the signed Windows check"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Output
+        if: steps.present.outputs.present == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: mingw-x86_64
+          path: signed
+
+      # For ./tooling diff-cli (Gradle)
+      - name: Set Up JDK
+        if: steps.present.outputs.present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Apply Signatures
+        if: steps.present.outputs.present == 'true'
+        run: |
+          for file in tor.dll tor.exe; do
+            ./tooling diff-cli apply "$PWD/$SIGNATURES/$file.signature" "$PWD/signed/$file"
+          done
+          {
+            echo "### mingw x86_64 signed output"
+            echo '```'
+            (cd signed && sha256sum tor.dll tor.exe)
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Signed Output
+        if: steps.present.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mingw-x86_64-signed
+          path: signed/
+          if-no-files-found: error
+
+  # Checks the signed Windows output on Windows itself: both files must have a valid, timestamped
+  # Authenticode signature, and the signed tor.exe must run with the signed tor.dll.
+  windows-signed-smoke:
+    name: smoke signed mingw-x86_64
+    needs: mingw-signed
+    if: needs.mingw-signed.outputs.present == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download Signed Output
+        uses: actions/download-artifact@v4
+        with:
+          name: mingw-x86_64-signed
+          path: tor-out
+
+      - name: Check Authenticode Signatures
+        shell: pwsh
+        run: |
+          $failed = $false
+          "### mingw x86_64 Authenticode signatures" >> $env:GITHUB_STEP_SUMMARY
+          "| File | Status | Signer | Timestamped by |" >> $env:GITHUB_STEP_SUMMARY
+          "| --- | --- | --- | --- |" >> $env:GITHUB_STEP_SUMMARY
+          foreach ($file in 'tor.dll', 'tor.exe') {
+            $sig = Get-AuthenticodeSignature -FilePath "tor-out\$file"
+            Write-Output "${file}: $($sig.Status) | signer: $($sig.SignerCertificate.Subject) | timestamped by: $($sig.TimeStamperCertificate.Subject)"
+            "| ``$file`` | $($sig.Status) | $($sig.SignerCertificate.Subject) | $($sig.TimeStamperCertificate.Subject) |" >> $env:GITHUB_STEP_SUMMARY
+            if ($sig.Status -ne 'Valid') {
+              Write-Output "::error::${file}: Authenticode status $($sig.Status): $($sig.StatusMessage)"
+              $failed = $true
+            }
+            if ($null -eq $sig.TimeStamperCertificate) {
+              Write-Output "::error::${file}: signature has no timestamp"
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+
+      # Same content as the tor.exe.local that external/task.sh package:mingw writes.
+      - name: Run Signed tor --version
+        shell: bash
+        run: |
+          echo "# https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-redirection#how-to-redirect-dlls-for-unpackaged-apps" > tor-out/tor.exe.local
+          ./tor-out/tor.exe --version
