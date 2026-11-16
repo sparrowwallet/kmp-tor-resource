@@ -34,14 +34,16 @@
         CI-built output, check both Authenticode signatures are valid and timestamped on Windows, and run
         the signed `tor.exe`.
 
-6) Package compilations
+6) Package compilations (on the Linux machine, after the signatures from step 5 are in place)
    ```shell
    ./external/task.sh package:all
    ```
 
 7) Update `ResourceValidation` extension hash values
    ```shell
-   ./external/task.sh validate:all:update_hashes
+   ./external/task.sh validate:update_hashes
    ```
 
-8) Ensure validation output has NO errors
+8) Ensure validation output has NO errors. A mismatched hash doesn't fail the Gradle build: the module
+   silently falls back to its mock resources. CI's `package` job packages the CI build and fails on any
+   validation error, so push and check it before releasing.

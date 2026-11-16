@@ -221,9 +221,9 @@ function sign:mingw:import { ## 1 ARG - [1]: dir with the signed tor.exe and tor
 }
 
 function validate { ## Checks the build/package directory output against expected sha256 hashes
+  # No MACOS_*: Kotlin/Native macOS isn't packaged (next step 1), so it has no hashes to validate.
   local targets="JVM"
   targets+=",LINUX_ARM64,LINUX_X64"
-  targets+=",MACOS_ARM64,MACOS_X64"
   targets+=",MINGW_X64"
 
   cd "$DIR_TASK/.."

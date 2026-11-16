@@ -499,3 +499,100 @@ jobs:
         run: |
           echo "# https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-redirection#how-to-redirect-dlls-for-unpackaged-apps" > tor-out/tor.exe.local
           ./tor-out/tor.exe --version
+
+  # No secrets. Packages this run's output for all five targets as a release does: gzip in the pinned
+  # build-env base image, with the committed macOS and Windows detached signatures applied. It then
+  # builds the JVM jars and runs the JVM tests against the packaged resources; test-linux runs the
+  # packaged tor. Fails if any resource doesn't match its validation hash in build-logic: on a mismatch
+  # Gradle otherwise falls back to the mock resources without failing.
+  package:
+    name: package and validate
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Packaging gzips inside build-env.base, pulled by its digest in build-env/digests.
+      - name: Log In To GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Download Output
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Place Output
+        run: |
+          for t in linux-libc/aarch64 linux-libc/x86_64 macos-lts/aarch64 macos-lts/x86_64 mingw/x86_64; do
+            name="${t%%/*}-${t##*/}"
+            if [ ! -d "artifacts/$name" ]; then echo "::error::Missing artifact $name"; exit 1; fi
+            mkdir -p "external/build/out/tor-gpl/$t"
+            cp -R "artifacts/$name/." "external/build/out/tor-gpl/$t/"
+          done
+          find external/build/out -type f | sort
+
+      # JDK 11 for the module-info compile (a Gradle toolchain), JDK 21 to run Gradle.
+      - name: Set Up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            21
+
+      - name: Package
+        run: ./external/task.sh package:all
+
+      - name: Build Jars And Run JVM Tests
+        run: |
+          rm -rf library/*/build/reports/resource-validation
+          ./gradlew -PKMP_TARGETS=JVM -Porg.gradle.java.installations.fromEnv=JAVA_HOME_11_X64 --no-build-cache \
+            :library:resource-exec-tor-gpl:jvmJar :library:resource-lib-tor-gpl:jvmJar :library:resource-geoip:jvmJar \
+            :library:resource-exec-tor-gpl:jvmTest :library:resource-geoip:jvmTest :test-linux:jvmTest
+
+      # Every report must exist (so validation ran) and be empty (so every hash matched).
+      - name: Check Validation Reports
+        run: |
+          fail=0
+          for report in \
+            library/resource-exec-tor-gpl/build/reports/resource-validation/resource-exec-tor-gpl/jvm.err \
+            library/resource-lib-tor-gpl/build/reports/resource-validation/resource-lib-tor-gpl/jvm.err \
+            library/resource-geoip/build/reports/resource-validation/resource-geoip/jvm-geoip.err; do
+            if [ ! -f "$report" ]; then echo "::error::$report was not written"; fail=1; fi
+          done
+          for report in $(find library -path '*/build/reports/resource-validation/*' -name '*.err' | sort); do
+            if [ -s "$report" ]; then
+              echo "::error::$report is not empty:"
+              cat "$report"
+              fail=1
+            else
+              echo "$report: OK"
+            fi
+          done
+          if ! grep -q 'Tor 0.4.9.16 running on Linux' test-linux/build/test-results/jvmTest/*.xml; then
+            echo "::error::test-linux didn't run the packaged tor"
+            fail=1
+          fi
+          exit "$fail"
+
+      - name: Record Hashes
+        run: |
+          {
+            echo "### Packaged resources"
+            echo '```'
+            (cd external/build/package && find . -name '*.gz' | sort | xargs sha256sum | sed 's#  \./#  #')
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Packaged Resources And Jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: |
+            external/build/package/
+            library/*/build/libs/*.jar
+          if-no-files-found: error
