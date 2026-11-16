@@ -162,43 +162,37 @@ jobs:
           ./tor-out/tor.exe --version
 
   # Signs the macOS output with Sparrow's Developer ID (hardened runtime), notarizes it, and uploads the
-  # detached signatures (diff-cli) to commit under external/codesign/tor-gpl/macos-lts/<arch>/.
-  # Run by hand (workflow_dispatch with sign_macos), only when the macOS binaries change.
+  # signed binaries. Run by hand (workflow_dispatch with sign_macos), only when the macOS binaries change.
+  #
+  # This is the only job with the signing secrets. It doesn't check out the repository and runs no Gradle
+  # or Java; the only code it runs from this repo's build is the signed tor, after the keychain is deleted.
+  # No action runs while the keychain exists: artifacts are downloaded before the keychain is created,
+  # and uploaded after it's deleted. Actions are pinned by commit SHA.
   sign-macos:
     name: sign macos-lts
     needs: [build, macos-smoke]
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_macos }}
     runs-on: macos-15
-    permissions:
-      contents: read
+    # Artifacts of this run need no token permissions.
+    permissions: {}
     env:
       UNSIGNED: ${{ github.workspace }}/unsigned
       SIGNED: ${{ github.workspace }}/signed
-      SIGNATURES: ${{ github.workspace }}/external/codesign/tor-gpl/macos-lts
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # For ./tooling diff-cli (Gradle)
-      - name: Set Up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-
       - name: Download Output aarch64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: macos-lts-aarch64
           path: unsigned/aarch64
 
       - name: Download Output x86_64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: macos-lts-x86_64
           path: unsigned/x86_64
 
-      # As in Sparrow's codesign-macos action.
+      # As in Sparrow's codesign-macos action, plus -x: the private key is imported non-extractable,
+      # so it can be used for signing but not exported from the keychain.
       - name: Set Up Signing Keychain
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -206,22 +200,29 @@ jobs:
           TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          # Recorded first, so the delete step finds the keychain even if this step fails part way.
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          rm "$RUNNER_TEMP/certificate.p12"
+
+          P12="$RUNNER_TEMP/certificate.p12"
+          trap 'rm -f "$P12"' EXIT
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$P12"
+          security import "$P12" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -x
+          rm -f "$P12"
+
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
-          # The Developer ID Application identity of the notarization team
+          # The Developer ID Application identity of the notarization team. Listed as valid only if the
+          # private key was imported with it; the Sign step is what proves codesign can use it.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
           IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
             | grep "Developer ID Application: .*($TEAM_ID)\"" | head -n 1 | awk '{ print $2 }')"
           if [ -z "$IDENTITY" ]; then
-            echo "::error::No 'Developer ID Application' identity for team $TEAM_ID in MACOS_CERTIFICATE"
+            echo "::error::No valid 'Developer ID Application' identity for team $TEAM_ID in MACOS_CERTIFICATE"
             exit 1
           fi
           echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
@@ -243,6 +244,15 @@ jobs:
               echo "$info" | grep -q 'flags=.*(runtime)' || { echo "::error::$arch/$file: no hardened runtime"; exit 1; }
             done
           done
+
+      # Right after signing, whether or not it succeeded, so the keychain is gone before anything else runs.
+      - name: Delete Signing Keychain
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -f "$RUNNER_TEMP/certificate.p12"
 
       # A zip of the bare binaries: notarization records every signature in it, and the detached
       # signatures don't depend on stapling (which can't be applied to a bare Mach-O file anyway).
@@ -273,6 +283,71 @@ jobs:
         run: |
           chmod +x "$SIGNED/aarch64/tor"
           "$SIGNED/aarch64/tor" --version
+
+      - name: Upload Signed Output
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-lts-signed
+          path: signed/
+          if-no-files-found: error
+
+      - name: Upload Notarization Log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-lts-notarization
+          path: |
+            notary-result.json
+            notary-log.json
+          if-no-files-found: ignore
+
+  # No secrets. Runs the signed x86_64 output on Intel (library validation between the signed tor and
+  # libtor.dylib; sign-macos runs arm64), then creates the detached signatures with diff-cli (Gradle) and
+  # uploads them to commit under external/codesign/tor-gpl/macos-lts/<arch>/.
+  macos-signatures:
+    name: signatures macos-lts
+    needs: sign-macos
+    runs-on: macos-15-intel
+    permissions:
+      contents: read
+    env:
+      UNSIGNED: ${{ github.workspace }}/unsigned
+      SIGNED: ${{ github.workspace }}/signed
+      SIGNATURES: ${{ github.workspace }}/external/codesign/tor-gpl/macos-lts
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Output aarch64
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-aarch64
+          path: unsigned/aarch64
+
+      - name: Download Output x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-x86_64
+          path: unsigned/x86_64
+
+      - name: Download Signed Output
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-signed
+          path: signed
+
+      # Artifacts don't keep file modes.
+      - name: Run Signed tor --version
+        run: |
+          chmod +x "$SIGNED/x86_64/tor"
+          "$SIGNED/x86_64/tor" --version
+
+      # For ./tooling diff-cli (Gradle)
+      - name: Set Up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
 
       - name: Create Detached Signatures
         run: |
@@ -312,20 +387,3 @@ jobs:
           name: macos-lts-signatures
           path: external/codesign/tor-gpl/macos-lts/
           if-no-files-found: error
-
-      - name: Upload Notarization Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-lts-notarization
-          path: |
-            notary-result.json
-            notary-log.json
-          if-no-files-found: ignore
-
-      - name: Delete Signing Keychain
-        if: always()
-        run: |
-          if [ -n "${KEYCHAIN_PATH:-}" ]; then
-            security delete-keychain "$KEYCHAIN_PATH" || true
-          fi
