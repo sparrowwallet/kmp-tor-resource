@@ -18,7 +18,6 @@ import io.matthewnelson.kmp.configuration.extension.container.target.KmpConfigur
 import org.gradle.accessors.dm.LibrariesForLibs
 import org.gradle.api.Action
 import org.gradle.configurationcache.extensions.capitalized
-import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.the
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import resource.validation.extensions.ExecTorResourceValidationExtension
@@ -35,11 +34,7 @@ fun KmpConfigurationExtension.configureExecTor(
     val suffix = if (isGpl) "-gpl" else ""
     val packageName = "io.matthewnelson.kmp.tor.resource.exec.tor"
     val execResourceValidation by lazy {
-        if (isGpl) {
-            ExecTorResourceValidationExtension.GPL::class.java
-        } else {
-            ExecTorResourceValidationExtension::class.java
-        }.let { project.extensions.getByType(it) }
+        project.extensions.getByType(ExecTorResourceValidationExtension::class.java)
     }
 
     val buildDir = project.layout
@@ -47,30 +42,9 @@ fun KmpConfigurationExtension.configureExecTor(
         .get().asFile
 
     configureShared(
-        androidNamespace = packageName,
         java9ModuleName = packageName,
         publish = true,
     ) {
-        androidLibrary {
-            android {
-                packaging.jniLibs.useLegacyPackaging = true
-
-                sourceSets["androidTest"].manifest.srcFile(
-                    project.projectDir
-                        .resolve("src")
-                        .resolve("androidInstrumentedTest")
-                        .resolve("AndroidManifest.xml")
-                )
-            }
-
-            sourceSetTestInstrumented {
-                dependencies {
-                    implementation(libs.androidx.test.core)
-                    implementation(libs.androidx.test.runner)
-                }
-            }
-        }
-
         jvm {
             sourceSetMain {
                 resources.srcDir(execResourceValidation.jvmNativeLibResourcesSrcDir())
@@ -87,18 +61,12 @@ fun KmpConfigurationExtension.configureExecTor(
             }
         }
 
-        kotlin { execResourceValidation.configureNativeResources(this) }
-
+        // jvmAndroid is kmp-configuration's intermediate JVM source set; it exists without an
+        // Android target, and holds code (lib-tor jvmAndroidMain) and tests (jvmAndroidTest).
         sourceSetConnect(
             newName = "exec",
             existingNames = listOf(
-                "androidNative",
                 "jvmAndroid",
-                "js",
-                "wasmJs",
-                "linux",
-                "macos",
-                "mingw",
             ),
             sourceSetMain = {
                 dependencies {
@@ -108,17 +76,9 @@ fun KmpConfigurationExtension.configureExecTor(
             },
         )
         sourceSetConnect(
-            newName = "nonExec",
-            existingNames = listOf(
-                "ios",
-            ),
-        )
-        sourceSetConnect(
             newName = "jvmJs",
             existingNames = listOf(
                 "jvm",
-                "js",
-                "wasmJs",
             ),
             dependencyName = "exec",
             sourceSetMain = {
@@ -132,34 +92,10 @@ fun KmpConfigurationExtension.configureExecTor(
             with(sourceSets) {
                 listOf(
                     "jvmAndroid",
-                    "js",
-                    "wasmJs",
-                    "linux",
-                    "macos",
-                    "mingw",
                 ).forEach { name ->
                     findByName(name + "Main")?.apply {
                         dependencies {
                             implementation(project(":library:resource-lib-tor$suffix"))
-                        }
-                    }
-                }
-            }
-        }
-
-        kotlin {
-            with(sourceSets) {
-                listOf(
-                    "js",
-                    "wasmJs",
-                ).forEach { name ->
-                    findByName(name + "Test")?.apply {
-                        // Only add as test dependency. Consumers need to declare the npm dependency
-                        // themselves when using `Node.js` because there is not currently a way to
-                        // exclude a npm dependency for kotlin when packaging things on a per-platform
-                        // basis.
-                        dependencies {
-                            implementation(npm("kmp-tor.resource-exec-tor${suffix}.all", project.npmVersion))
                         }
                     }
                 }
@@ -206,10 +142,6 @@ fun KmpConfigurationExtension.configureExecTor(
                             lineTestDir = "internal expect val TEST_DIR: String"
                         }
 
-                        if (sourceSet.name.startsWith("android")) {
-                            lineTestDir = "internal actual val TEST_DIR: String = \"\""
-                        }
-
                         @Suppress("DEPRECATION")
                         dir.resolve("BuildConfig${sourceSet.name.capitalized()}.kt").writeText("""
                             package $packageName
@@ -227,54 +159,21 @@ fun KmpConfigurationExtension.configureExecTor(
 
                 val resourceValidationExecTor = execResourceValidation
 
-                val resourceValidationLibTor = if (isGpl) {
-                    LibTorResourceValidationExtension.GPL::class.java
-                } else {
-                    LibTorResourceValidationExtension::class.java
-                }.let { project.extensions.getByType(it) }
+                val resourceValidationLibTor = project.extensions
+                    .getByType(LibTorResourceValidationExtension::class.java)
 
-                // The resource-compilation-* modules that provided the Android jniLibs were removed,
-                // so Android has no real resources and never runs the full tests.
-                val reportAndroid = "Android resources are not built"
                 val reportJvm by lazy {
                     val exec = resourceValidationExecTor.errorReportJvmNativeLibResources()
                     val lib = resourceValidationLibTor.errorReportJvmNativeLibResources()
                     exec + lib
                 }
 
-                listOf(
-                    "androidInstrumented" to { reportAndroid },
-                    "androidNative" to { reportAndroid },
-
-                    // If no errors for JVM resources, then android-unit-test project
-                    // dependency and js is not utilizing mock resources and can run tests.
-                    "androidUnit" to { reportJvm },
-                    "js" to { reportJvm },
-                    "wasmJs" to { reportJvm },
-
-                    "jvm" to { reportJvm },
-                    "linuxArm64" to null,
-                    "linuxX64" to null,
-                    "macosArm64" to null,
-                    "macosX64" to null,
-                    "mingwX64" to null,
-                ).forEach { (sourceSetName, reports) ->
-                    val srcSetTest = findByName(sourceSetName + "Test") ?: return@forEach
-
-                    srcSetTest.generateBuildConfig {
-                        val errors = reports?.invoke() ?: listOf(
-                            resourceValidationExecTor.errorReportNativeResource(sourceSetName),
-                            resourceValidationLibTor.errorReportNativeResource(sourceSetName),
-                        ).joinToString("")
-
-                        errors.indexOfFirst { !it.isWhitespace() } == -1
-                    }
+                // Full tests run only when the JVM resources are the real (packaged) ones.
+                findByName("jvmTest")?.generateBuildConfig {
+                    reportJvm.indexOfFirst { !it.isWhitespace() } == -1
                 }
             }
         }
-
-        configureAndroidEnvironmentKeysConfig(project)
-        configureAndroidNativeEmulatorTests(project)
 
         action.execute(this)
     }

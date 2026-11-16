@@ -21,53 +21,6 @@ import java.io.File
 
 sealed class ValidationHash private constructor() {
 
-    internal data class LibAndroid internal constructor(
-        val libname: String,
-        val hashArm64: String,
-        val hashArmv7: String,
-        val hashX86: String,
-        @Suppress("PropertyName")
-        val hashX86_64: String,
-    ): ValidationHash() {
-
-        internal fun validate(
-            packageModuleDir: File,
-        ): List<ERROR> {
-            val errors = mutableListOf<ERROR>()
-
-            val jniLibs = packageModuleDir
-                .resolve("src")
-                .resolve("androidMain")
-                .resolve("jniLibs")
-
-            listOf(
-                "arm64-v8a" to hashArm64,
-                "armeabi-v7a" to hashArmv7,
-                "x86" to hashX86,
-                "x86_64" to hashX86_64,
-            ).forEach { (abi, hash) ->
-                val lib = jniLibs
-                    .resolve(abi)
-                    .resolve(libname)
-
-                val rPath = lib.path.substringAfter("${File.separatorChar}kmp-tor-resource${File.separatorChar}")
-
-                if (!lib.exists()) {
-                    errors.add("Lib does not exist: $rPath".toERROR())
-                    return@forEach
-                }
-
-                val actualHash = lib.sha256()
-                if (hash != actualHash) {
-                    errors.add("Lib ${formatHashMismatch(actualHash, hash, rPath)}".toERROR())
-                    return@forEach
-                }
-            }
-
-            return errors
-        }
-    }
-
     internal data class LibJvm internal constructor(
         val osName: String,
         val osSubtype: String = "",
@@ -126,53 +79,6 @@ sealed class ValidationHash private constructor() {
             }
 
             return null
-        }
-    }
-
-    internal data class ResourceNative internal constructor(
-        val sourceSetName: SourceSetName,
-        val ktFileName: String,
-        val hash: String,
-    ): ValidationHash() {
-
-        internal fun validate(
-            packageModuleDir: File,
-            packageName: String,
-        ): ERROR? {
-            val file = sourceSetName
-                .sourceSetDir(packageModuleDir)
-                .resolve("kotlin")
-                .resolve(packageName.replace('.', '/'))
-                .resolve("internal")
-                .resolve(ktFileName)
-
-            val rPath = file.path.substringAfter("${File.separatorChar}kmp-tor-resource${File.separatorChar}")
-
-            if (!file.exists()) {
-                return "Resource does not exist: $rPath".toERROR()
-            }
-
-            try {
-                file.inputStream().bufferedReader().use { reader ->
-                    while (true) {
-                        val line = reader.readLine()
-
-                        if (!line.startsWith("    sha256 = ")) continue
-
-                        val actualHash = line.substringAfter('\"')
-                            .substringBefore('\"')
-
-                        return if (hash == actualHash) {
-                            // No error
-                            null
-                        } else {
-                            "Resource ${formatHashMismatch(actualHash, hash, rPath)}".toERROR()
-                        }
-                    }
-                }
-            } catch (_: Throwable) {}
-
-            return "Failed to find the sha256 value for NativeResource: $rPath".toERROR()
         }
     }
 

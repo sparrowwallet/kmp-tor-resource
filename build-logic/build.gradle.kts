@@ -28,8 +28,6 @@ gradlePlugin {
 }
 
 dependencies {
-    implementation(libs.gradle.android)
-    implementation(libs.gradle.cklib)
     implementation(libs.gradle.kmp.configuration)
     implementation(libs.gradle.kotlin)
     implementation(libs.gradle.publish.maven)

@@ -15,7 +15,6 @@
  **/
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     id("configuration")
@@ -40,39 +39,12 @@ repositories {
 }
 
 kmpConfiguration {
-    configureShared(androidNamespace = "tools.check.publication") {
-        androidLibrary {
-            sourceSetMain {
-                dependencies {
-                    // Should be a SEPARATE publication from -jvm
-                    implementation("$group:resource-lib-tor-gpl-android:$version")
-                }
-            }
-        }
-
+    configureShared {
         jvm {
             sourceSetMain {
                 dependencies {
+                    // Should be a SEPARATE publication from the root (kotlinMultiplatform) one
                     implementation("$group:resource-lib-tor-gpl-jvm:$version")
-                }
-            }
-        }
-
-        js {
-            sourceSetMain {
-                dependencies {
-                    implementation("$group:resource-lib-tor-gpl-js:$version")
-                    implementation(npm("kmp-tor.resource-exec-tor-gpl.all", project.npmVersion))
-                }
-            }
-        }
-
-        @OptIn(ExperimentalWasmDsl::class)
-        wasmJs {
-            sourceSetMain {
-                dependencies {
-                    implementation("$group:resource-lib-tor-gpl-wasm-js:$version")
-                    implementation(npm("kmp-tor.resource-exec-tor-gpl.all", project.npmVersion))
                 }
             }
         }
@@ -82,27 +54,9 @@ kmpConfiguration {
                 dependencies {
                     implementation("$group:resource-geoip:$version")
                     implementation("$group:resource-exec-tor-gpl:$version")
+                    implementation("$group:resource-lib-tor-gpl:$version")
                 }
             }
         }
-
-        sourceSetConnect(
-            "libTor",
-            listOf(
-                "jvmAndroid",
-                "js",
-                "wasmJs",
-                "iosSimulatorArm64",
-                "iosX64",
-                "linux",
-                "macos",
-                "mingw",
-            ),
-            sourceSetMain = {
-                dependencies {
-                    implementation("$group:resource-lib-tor-gpl:$version")
-                }
-            },
-        )
     }
 }

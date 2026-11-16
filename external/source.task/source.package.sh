@@ -25,9 +25,6 @@ function __package:geoip {
   local gzip="yes"
 
   __package:file "tor/src/config" "jvmMain/resources/io/matthewnelson/kmp/tor/resource/geoip" "$1"
-
-  local native_resource="io.matthewnelson.kmp.tor.resource.geoip.internal"
-  __package:file "tor/src/config" "nativeMain" "$1"
 }
 
 function __package:linux:jvm {
@@ -53,7 +50,7 @@ function __package:linux:jvm {
 function __package:jvm {
   __util:require:var_set "$dirname_out" "dirname_out"
   __util:require:var_set "$rpath_native" "rpath_native (e.g. jvmMain/resources/io/matthewnelson/kmp/tor/{rpath_native}/native/{target}/{arch})"
-  __util:require:var_set "$target" "target (e.g. linux-android)"
+  __util:require:var_set "$target" "target (e.g. linux-libc)"
   __util:require:var_set "$1" "[1] arch"
   __util:require:var_set "$2" "[2] File name"
 
@@ -68,7 +65,7 @@ function __package:jvm {
 }
 
 function __package:jvm:codesign {
-  __util:require:var_set "$target" "target (e.g. linux-android)"
+  __util:require:var_set "$target" "target (e.g. linux-libc)"
   __util:require:var_set "$1" "[1] arch"
 
   local detached_sig="$target/$1"
@@ -90,32 +87,6 @@ function __package:jvm:move:macos-lts {
   fi
 }
 
-function __package:native {
-  __util:require:var_set "$dirname_out" "dirname_out"
-  __util:require:var_set "$target" "target (e.g. linux-libc)"
-  __util:require:var_set "$native_resource" "native_resource (package name)"
-  __util:require:var_set "$1" "[1] arch"
-  __util:require:var_set "$2" "[2] File name"
-  __util:require:var_set "$3" "[3] Source set name (e.g. linuxArm64Main)"
-
-  if [ -z "$permissions" ]; then
-    local permissions="775"
-  fi
-  if [ -z "$gzip" ]; then
-    local gzip="yes"
-  fi
-
-  __package:file "build/out/$dirname_out/$target/$1" "$3" "$2"
-}
-
-function __package:native:codesign {
-  __util:require:var_set "$target" "target (e.g. linux-libc)"
-  __util:require:var_set "$1" "[1] arch"
-
-  local detached_sig="$target/$1"
-  __package:native "$@"
-}
-
 function __package:file {
   __util:require:var_set "$1" "Packaging target dir (relative to dir external/build/)"
   __util:require:var_set "$2" "Module src path (relative to dir external/build/package/{dirname_final}/src/)"
@@ -130,7 +101,6 @@ function __package:file {
     Detached Signature:   $detached_sig
     gzip:                 $gzip
     permissions:          $permissions
-    NativeResource:       $native_resource
     Module Src Dir:       build/package/$dirname_final/src/$2
     "
     return 0
@@ -169,15 +139,6 @@ function __package:file {
 
   local dir_module="$DIR_TASK/build/package/$dirname_final/src/$2"
 
-  if [ -z "$native_resource" ]; then
-    mkdir -p "$dir_module"
-    mv -v "$DIR_STAGING/$3$file_ext" "$dir_module"
-  else
-    ../tooling resource-cli \
-      "$native_resource" \
-      "$dir_module" \
-      "$DIR_STAGING/$3$file_ext"
-  fi
-
-  rm -f "$DIR_STAGING/$3$file_ext"
+  mkdir -p "$dir_module"
+  mv -v "$DIR_STAGING/$3$file_ext" "$dir_module"
 }

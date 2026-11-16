@@ -30,7 +30,6 @@ internal inline fun OSHost.toTorResourcePath(
     val resourceName = when (resourceLib) {
         "lib" -> resourceNameLibTor
         "exec" -> resourceNameTor
-        "noexec" -> resourceNameLibTorJni
         else -> throw IllegalArgumentException("Unknown resourceLib[$resourceLib]")
     }
 
@@ -58,18 +57,6 @@ internal inline fun Resource.Config.Builder.configureLibTorResource(
 ) {
     configureExecutableResource(alias) { host, arch ->
         resourcePath = host.toTorResourcePath(arch, resourceLib = "lib")
-        resourceClass = loader
-    }
-}
-
-@Suppress("NOTHING_TO_INLINE")
-@OptIn(InternalKmpTorApi::class)
-internal inline fun Resource.Config.Builder.configureLibTorJniResource(
-    alias: String,
-    loader: Class<*>,
-) {
-    configureExecutableResource(alias) { host, arch ->
-        resourcePath = host.toTorResourcePath(arch, resourceLib = "noexec")
         resourceClass = loader
     }
 }

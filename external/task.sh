@@ -140,20 +140,6 @@ function package:linux-libc { ## Packages all Linux Libc build/out contents
   local archs="aarch64 x86_64"
   local os_subtype="-libc"
   __package:linux:jvm
-  unset archs os_subtype
-
-  local dirname_out="tor-gpl"
-  local dirname_final="resource-lib-tor-gpl"
-  local target="linux-libc"
-
-  local native_resource="io.matthewnelson.kmp.tor.resource.lib.tor.internal"
-  __package:native "aarch64" "libtor.so" "linuxArm64Main"
-  __package:native "x86_64" "libtor.so" "linuxX64Main"
-
-  dirname_final="resource-exec-tor-gpl"
-  native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
-  __package:native "aarch64" "tor" "linuxArm64Main"
-  __package:native "x86_64" "tor" "linuxX64Main"
 }
 
 function package:macos { ## Packages all macOS LTS build/out contents
@@ -184,16 +170,6 @@ function package:mingw { ## Packages all MinGW build/out contents
   __package:jvm:codesign "x86_64" "tor.exe"
 
   unset rpath_native
-
-  dirname_final="resource-lib-tor-gpl"
-  local native_resource="io.matthewnelson.kmp.tor.resource.lib.tor.internal"
-  __package:native:codesign "x86_64" "tor.dll" "mingwX64Main"
-
-  dirname_final="resource-exec-tor-gpl"
-  native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
-  __package:native:codesign "x86_64" "tor.exe" "mingwX64Main"
-
-  unset native_resource
   unset dirname_out
 
   local permissions="664"
@@ -202,9 +178,6 @@ function package:mingw { ## Packages all MinGW build/out contents
 
   dirname_final="resource-exec-tor-gpl"
   __package:file "build" "jvmMain/resources/io/matthewnelson/kmp/tor/resource/exec/tor/native/mingw" "tor.exe.local"
-
-  local native_resource="io.matthewnelson.kmp.tor.resource.exec.tor.internal"
-  __package:file "build" "mingwX64Main" "tor.exe.local"
 
   rm -rf "$DIR_TASK/build/tor.exe.local"
 }
@@ -221,14 +194,9 @@ function sign:mingw:import { ## 1 ARG - [1]: dir with the signed tor.exe and tor
 }
 
 function validate { ## Checks the build/package directory output against expected sha256 hashes
-  # No MACOS_*: Kotlin/Native macOS isn't packaged (next step 1), so it has no hashes to validate.
-  local targets="JVM"
-  targets+=",LINUX_ARM64,LINUX_X64"
-  targets+=",MINGW_X64"
-
   cd "$DIR_TASK/.."
-  ./gradlew clean -PKMP_TARGETS="$targets"
-  ./gradlew prepareKotlinBuildScriptModel -PKMP_TARGETS="$targets"
+  ./gradlew clean
+  ./gradlew prepareKotlinBuildScriptModel
 
   __validate:report "resource-exec-tor-gpl"
   __validate:report "resource-geoip"

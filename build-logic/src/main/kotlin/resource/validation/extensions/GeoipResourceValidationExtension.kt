@@ -16,8 +16,6 @@
 package resource.validation.extensions
 
 import org.gradle.api.Project
-import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
-import resource.validation.extensions.internal.SourceSetName.Companion.toSourceSetName
 import resource.validation.extensions.internal.ValidationHash
 import java.io.File
 import javax.inject.Inject
@@ -38,8 +36,6 @@ abstract class GeoipResourceValidationExtension @Inject internal constructor(
 
     fun jvmResourcesSrcDir(): File = jvmResourcesSrcDirProtected(reportName = "jvm-geoip")
     fun errorReportJvmResources(): String = errorReportJvmResourcesProtected()
-    fun configureNativeResources(kmp: KotlinMultiplatformExtension) { configureNativeResourcesProtected(kmp) }
-    fun errorReportNativeResources(): String = errorReportNativeResourceProtected(sourceSet = "native")
 
     final override val hashes: Set<ValidationHash> by lazy { setOf(
         ValidationHash.ResourceJvm(
@@ -48,16 +44,6 @@ abstract class GeoipResourceValidationExtension @Inject internal constructor(
         ),
         ValidationHash.ResourceJvm(
             fileName = "geoip6.gz",
-            hash = geoip6,
-        ),
-        ValidationHash.ResourceNative(
-            sourceSetName = "native".toSourceSetName(),
-            ktFileName = "resource_geoip_gz.kt",
-            hash = geoip,
-        ),
-        ValidationHash.ResourceNative(
-            sourceSetName = "native".toSourceSetName(),
-            ktFileName = "resource_geoip6_gz.kt",
             hash = geoip6,
         ),
     ) }

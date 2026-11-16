@@ -71,10 +71,10 @@ kmpConfiguration {
                 .getByType(GeoipResourceValidationExtension::class.java)
             val resourceValidationLibTor = project
                 .extensions
-                .getByType(LibTorResourceValidationExtension.GPL::class.java)
+                .getByType(LibTorResourceValidationExtension::class.java)
             val resourceValidationExecTor = project
                 .extensions
-                .getByType(ExecTorResourceValidationExtension.GPL::class.java)
+                .getByType(ExecTorResourceValidationExtension::class.java)
 
             val reportJvm by lazy {
                 val geoip = resourceValidationGeoip.errorReportJvmResources()

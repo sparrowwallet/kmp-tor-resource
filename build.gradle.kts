@@ -14,19 +14,11 @@
  * limitations under the License.
  **/
 import kotlinx.validation.ApiValidationExtension
-import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnLockMismatchReport
-import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnPlugin
-import org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension
-import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin
-import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnRootExtension
 import org.jetbrains.kotlin.konan.target.HostManager
 
 plugins {
-    alias(libs.plugins.android.library) apply(false)
     alias(libs.plugins.binary.compat)
-    alias(libs.plugins.cklib) apply(false)
     alias(libs.plugins.kotlin.multiplatform) apply(false)
-    alias(libs.plugins.publish.npm) apply(false)
 }
 
 allprojects {
@@ -36,7 +28,6 @@ allprojects {
 
     repositories {
         mavenCentral()
-        google()
 
         if (version.toString().endsWith("-SNAPSHOT")) {
             // Only allow snapshot dependencies for non-release versions.
@@ -50,34 +41,11 @@ allprojects {
 @Suppress("PropertyName")
 val CHECK_PUBLICATION = findProperty("CHECK_PUBLICATION") != null
 
-plugins.withType<YarnPlugin> {
-    the<YarnRootExtension>().apply {
-        lockFileDirectory = rootDir.resolve(".kotlin-js-store").resolve("js")
-        if (CHECK_PUBLICATION) yarnLockMismatchReport = YarnLockMismatchReport.NONE
-    }
-}
-
-plugins.withType<WasmYarnPlugin> {
-    the<WasmYarnRootExtension>().apply {
-        lockFileDirectory = rootDir.resolve(".kotlin-js-store").resolve("wasm")
-        if (CHECK_PUBLICATION) yarnLockMismatchReport = YarnLockMismatchReport.NONE
-    }
-}
-
-@Suppress("LocalVariableName")
 extensions.configure(ApiValidationExtension::class.java) {
     if (!HostManager.hostIsMac) {
         validationDisabled = true
         return@configure
     }
-
-    val KMP_TARGETS_ALL = System.getProperty("KMP_TARGETS_ALL") != null
-    val KMP_TARGETS = (findProperty("KMP_TARGETS") as? String)?.split(',')
-
-    // Only enable when selectively enabled targets are not being passed via cli.
-    // See https://github.com/Kotlin/binary-compatibility-validator/issues/269
-    @OptIn(kotlinx.validation.ExperimentalBCVApi::class)
-    klib.enabled = KMP_TARGETS == null
 
     if (CHECK_PUBLICATION) {
         ignoredProjects.add("check-publication")
@@ -86,11 +54,5 @@ extensions.configure(ApiValidationExtension::class.java) {
 
         findProperty("TOOLING")?.let { return@configure }
         nonPublicMarkers.add("io.matthewnelson.kmp.tor.common.api.InternalKmpTorApi")
-
-        // Don't check these projects when building JVM only or Android only
-        if (!KMP_TARGETS_ALL && KMP_TARGETS?.containsAll(setOf("ANDROID", "JVM")) == false) {
-            ignoredProjects.add("resource-exec-tor-gpl")
-            ignoredProjects.add("resource-lib-tor-gpl")
-        }
     }
 }

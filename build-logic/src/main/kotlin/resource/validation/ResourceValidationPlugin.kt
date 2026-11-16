@@ -25,10 +25,8 @@ open class ResourceValidationPlugin internal constructor(): Plugin<Project> {
     override fun apply(target: Project) {
         listOf(
             ExecTorResourceValidationExtension.NAME to ExecTorResourceValidationExtension::class.java,
-            ExecTorResourceValidationExtension.GPL.NAME to ExecTorResourceValidationExtension.GPL::class.java,
             GeoipResourceValidationExtension.NAME to GeoipResourceValidationExtension::class.java,
             LibTorResourceValidationExtension.NAME to LibTorResourceValidationExtension::class.java,
-            LibTorResourceValidationExtension.GPL.NAME to LibTorResourceValidationExtension.GPL::class.java,
         ).forEach { (name, clazz) ->
             target.extensions.create(name, clazz, target)
         }

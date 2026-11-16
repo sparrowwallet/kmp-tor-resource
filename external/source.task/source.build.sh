@@ -80,16 +80,7 @@ function __build:configure:target:init {
   __util:require:var_set "$os_arch" "os_arch"
   __util:require:var_set "$openssl_target" "openssl_target"
 
-  case "$os_name" in
-    "android")
-      __util:require:var_set "$ndk_abi" "ndk_abi"
-
-      DIR_OUT_SUFFIX="$os_name/$ndk_abi"
-      ;;
-    *)
-      DIR_OUT_SUFFIX="$os_name$os_subtype/$os_arch"
-      ;;
-  esac
+  DIR_OUT_SUFFIX="$os_name$os_subtype/$os_arch"
   DIR_BUILD="build/stage/$DIR_OUT_SUFFIX"
 
   unset CONF_CFLAGS
@@ -218,7 +209,7 @@ fi
       __build:LDFLAGS '-Wl,--no-insert-timestamp'
       __build:LDFLAGS '-static-libgcc'
       ;;
-    "ios"|"macos"|"tvos"|"watchos")
+    "macos")
       __build:LDFLAGS '-Wl,-no_adhoc_codesign'
       ;;
   esac
@@ -281,12 +272,6 @@ fi
     __build:OPENSSL 'enable-ec_nistp_64_gcc_128'
   fi
 
-  if [ "$os_name" = "android" ]; then
-    # https://github.com/openssl/openssl/issues/18561#issuecomment-1155298077
-    __build:OPENSSL '-U__ANDROID_API__'
-    __build:OPENSSL '-D__ANDROID_API__=$ANDROID_TARGET_API'
-  fi
-
   if [ "$os_name" = "mingw" ]; then
     # Even though -static is declared in CFLAGS, it is declared here
     # because openssl's Configure file is jank.
@@ -308,7 +293,7 @@ fi
     --enable-static'
 
   case "$os_name" in
-    "ios"|"macos"|"tvos"|"watchos")
+    "macos")
       __build:LIBEVENT '--disable-clock-gettime'
       ;;
   esac
@@ -343,10 +328,7 @@ fi
     --host="$CROSS_TRIPLE"'
 
   case "$os_name" in
-    "android")
-      __build:TOR '--enable-android'
-      ;;
-    "ios"|"macos"|"tvos"|"watchos")
+    "macos")
       __build:TOR 'ac_cv_func__NSGetEnviron="no"'
 
       # external calls that are not liked by darwin targets
@@ -462,24 +444,13 @@ function __build:configure:target:finalize {
 '
 
     case "$os_name" in
-      "ios"|"macos"|"tvos"|"watchos")
+      "macos")
         # PATCH
         __build:SCRIPT '  # https://trac.macports.org/ticket/65838#no1'
         __build:SCRIPT "  sed -i 's+\"\${AR:-ar}\" x \"\$abs\"+\"\${AR:-ar}\" x \"\$abs\"; rm -f \"__.SYMDEF SORTED\"; rm -f \"__.SYMDEF\"+' \"scripts/build/combine_libs\""
         __build:SCRIPT ''
         ;;
     esac
-
-    if [ "$os_arch" = "aarch64" ]; then
-      case "$os_name" in
-        "ios"|"tvos"|"watchos")
-          # PATCH
-          __build:SCRIPT '  # https://gitlab.torproject.org/tpo/core/tor/-/issues/40903'
-          __build:SCRIPT '  sed -i "s+__builtin___clear_cache((void\*)code, (void\*)pos);+return true;+" "src/ext/equix/hashx/src/compiler_a64.c"'
-          __build:SCRIPT ''
-          ;;
-      esac
-    fi
 
     __build:SCRIPT "  ./autogen.sh > \"\$DIR_SCRIPT/$tor_target/logs/autogen.log\" 2> \"\$DIR_SCRIPT/$tor_target/logs/autogen.err\""
 
@@ -573,7 +544,6 @@ function __build:configure:target:finalize:output:shared {
   local is_apple=false
 
   local exec_name="tor"
-  # NOTE: Android API 23 and below will still need LD_LIBRARY_PATH set
   local exec_ldflags="-Wl,-rpath,'\$ORIGIN'"
 
   local shared_name="libtor.so"
@@ -583,10 +553,6 @@ function __build:configure:target:finalize:output:shared {
   local strip_flags="-D"
 
   case "$os_name" in
-    "android")
-      exec_name="libtorexec.so"
-      shared_cflags+=" -Wl,-soname,$shared_name"
-      ;;
     "linux")
       # Defaults
       ;;
@@ -607,26 +573,6 @@ function __build:configure:target:finalize:output:shared {
       shared_cflags="-dynamiclib"
       shared_cflags+=" -exported_symbols_list exports/tor_api.exp"
       shared_cflags+=" -install_name @executable_path/$shared_name"
-      shared_ldadd=""
-      strip_flags+="u"
-      ;;
-    "ios"|"tvos"|"watchos")
-      is_apple=true
-
-      # Disable executable compilations
-      exec_name=""
-
-      shared_cflags="-dynamiclib"
-      shared_cflags+=" -exported_symbols_list exports/tor_api.exp"
-
-      if [ "$os_subtype" = "-simulator" ]; then
-        shared_name="libtor.dylib"
-        shared_cflags+=" -install_name @executable_path/$shared_name"
-      else
-        shared_name="LibTor"
-        shared_cflags+=" -install_name @rpath/$shared_name.framework/$shared_name"
-      fi
-
       shared_ldadd=""
       strip_flags+="u"
       ;;
@@ -724,19 +670,6 @@ fi
 
   __build:SCRIPT ''
 
-  if [ "$os_name" = "android" ]; then
-    __util:require:var_set "$exec_name" "exec_name"
-
-    __build:SCRIPT "  _out_linux=\"out/\$1/linux-android/$os_arch\""
-    __build:SCRIPT '  rm -rf "$_out_linux"'
-    __build:SCRIPT '  mkdir -p "$_out_linux"'
-    __build:SCRIPT "  cp -a \"\$_out/$shared_name\" \"\$_out_linux\""
-    __build:SCRIPT "  cp -a \"\$_out/$exec_name\" \"\$_out_linux/tor\""
-    __build:SCRIPT '  unset _out_linux'
-    __build:SCRIPT '  sleep 1'
-    __build:SCRIPT ''
-  fi
-
   __build:SCRIPT "  echo \"        STRIP[\$STRIP $strip_flags]\""
   __build:SCRIPT "  echo \"        BIN: \$(du -sh \"\$_bin/$shared_name\" | cut -d 's' -f 1) \$(cd \"\$_bin\" && sha256sum \"$shared_name\")\""
   __build:SCRIPT "  echo \"        OUT: \$(du -sh \"\$_out/$shared_name\" | cut -d 'o' -f 1) \$(cd \"\$_out\" && sha256sum \"$shared_name\")\""
@@ -753,8 +686,6 @@ fi
 
   needs_execution_items="\"$shared_name\""
 
-  local needs_execution_items_linux_android="$needs_execution_items"
-
   if [ -n "$exec_name" ]; then
     needs_execution_items+=" \"$exec_name\""
   fi
@@ -763,13 +694,6 @@ fi
 if needs_execution \"\$DIR_EXTERNAL/build\" \"out/tor-gpl/$DIR_OUT_SUFFIX\" $needs_execution_items; then
   install_libtor \"tor-gpl\"
 fi"
-
-  if [ "$os_name" = "android" ]; then
-    __build:SCRIPT "
-if needs_execution \"\$DIR_EXTERNAL/build\" \"out/tor-gpl/linux-$os_name/$os_arch\" $needs_execution_items_linux_android \"tor\"; then
-  install_libtor \"tor-gpl\"
-fi"
-  fi
 }
 
 function __build:docker:execute {
@@ -784,12 +708,7 @@ function __build:docker:execute {
     SIGINT intercepted... exiting...
 "; exit 1' SIGINT
 
-  # map os_arch to what docker container expects
   local docker_arch="$os_arch"
-  case "$os_arch" in
-    "armv7") docker_arch="armv7a"  ;;
-    "ppc64") docker_arch="ppc64le" ;;
-  esac
 
   local rebuild=""
   if $REBUILD; then

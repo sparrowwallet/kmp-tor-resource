@@ -41,21 +41,5 @@ kmpConfiguration {
                 }
             }
         }
-
-        kotlin { geoipResourceValidation.configureNativeResources(this) }
-
-        sourceSetConnect(
-            newName = "jsWasmJs",
-            existingNames = listOf(
-                "js",
-                "wasmJs",
-            ),
-            dependencyName = "nonJvm",
-            sourceSetMain = {
-                dependencies {
-                    implementation(npm("kmp-tor.resource-geoip", npmVersion))
-                }
-            },
-        )
     }
 }

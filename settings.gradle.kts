@@ -18,7 +18,6 @@ rootProject.name = "kmp-tor-resource"
 pluginManagement {
     repositories {
         mavenCentral()
-        google()
         gradlePluginPortal()
         maven("https://central.sonatype.com/repository/maven-snapshots/")
     }
@@ -81,7 +80,6 @@ if (CHECK_PUBLICATION != null) {
     listOf(
         "diff-cli",
         "diff-cli:core",
-        "resource-cli",
     ).forEach { module ->
         include(":tools:$module")
     }

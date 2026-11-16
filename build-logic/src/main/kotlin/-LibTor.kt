@@ -26,19 +26,12 @@ fun KmpConfigurationExtension.configureLibTor(
     require(project.name.startsWith("resource-lib-tor")) { "Invalid project." }
 
     val libs = project.the<LibrariesForLibs>()
-    val isGpl = project.name.endsWith("gpl")
     val libResourceValidation by lazy {
-        if (isGpl) {
-            LibTorResourceValidationExtension.GPL::class.java
-        } else {
-            LibTorResourceValidationExtension::class.java
-        }.let { project.extensions.getByType(it) }
+        project.extensions.getByType(LibTorResourceValidationExtension::class.java)
     }
 
     configureShared(
-        androidNamespace = "io.matthewnelson.kmp.tor.resource.lib.tor",
         java9ModuleName = "io.matthewnelson.kmp.tor.resource.lib.tor",
-        excludeNative = true,
         publish = true,
     ) {
         jvm {
@@ -46,14 +39,6 @@ fun KmpConfigurationExtension.configureLibTor(
                 resources.srcDir(libResourceValidation.jvmNativeLibResourcesSrcDir())
             }
         }
-
-        // Simulator only
-        iosSimulatorArm64()
-        iosX64()
-
-        linuxAll()
-        macosAll()
-        mingwAll()
 
         common {
             pluginIds("resource-validation")
@@ -65,53 +50,10 @@ fun KmpConfigurationExtension.configureLibTor(
             }
         }
 
-        kotlin { libResourceValidation.configureNativeResources(this) }
-
-        sourceSetConnect(
-            newName = "jsWasmJs",
-            existingNames = listOf(
-                "js",
-                "wasmJs",
-            ),
-            dependencyName = "nonJvm",
-            sourceSetMain = {
-                val srcDir = project.layout
-                    .buildDirectory
-                    .get()
-                    .asFile
-                    .resolve("generated")
-                    .resolve("sources")
-                    .resolve("buildConfig")
-                    .resolve("jsWasmJsMain")
-                    .resolve("kotlin")
-
-                val configDir = srcDir
-                    .resolve("io")
-                    .resolve("matthewnelson")
-                    .resolve("kmp")
-                    .resolve("tor")
-                    .resolve("resource")
-                    .resolve("lib")
-                    .resolve("tor")
-                    .resolve("internal")
-
-                configDir.mkdirs()
-
-                configDir.resolve("BuildConfigJS.kt").writeText("""
-                    package io.matthewnelson.kmp.tor.resource.lib.tor.internal
-
-                    internal const val IS_GPL: Boolean = $isGpl
-
-                """.trimIndent())
-
-                kotlin.srcDir(srcDir)
-            },
-        )
         sourceSetConnect(
             newName = "nonNative",
             existingNames = listOf(
                 "jvmAndroid",
-                "jsWasmJs",
             ),
         )
 

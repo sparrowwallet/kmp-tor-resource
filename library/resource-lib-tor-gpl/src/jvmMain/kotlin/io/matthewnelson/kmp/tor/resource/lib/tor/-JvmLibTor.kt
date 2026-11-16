@@ -19,20 +19,9 @@ import io.matthewnelson.kmp.tor.common.api.InternalKmpTorApi
 import io.matthewnelson.kmp.tor.common.api.ResourceLoader
 import io.matthewnelson.kmp.tor.common.core.Resource
 import io.matthewnelson.kmp.tor.resource.lib.tor.internal.*
-import io.matthewnelson.kmp.tor.resource.lib.tor.internal.configureLibTorJniResource
 
 private class Loader private constructor() {
     init { throw IllegalStateException() }
-}
-
-@InternalKmpTorApi
-public fun <LoaderImpl: ResourceLoader.Tor.NoExec> Resource.Config.Builder.configureNoExecTorResource(
-    aliasLibTor: String,
-    aliasLibTorJni: String,
-    loaderClass: Class<LoaderImpl>,
-) {
-    configureLibTorResource(aliasLibTor, Loader::class.java)
-    configureLibTorJniResource(aliasLibTorJni, loaderClass)
 }
 
 @InternalKmpTorApi

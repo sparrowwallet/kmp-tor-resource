@@ -16,14 +16,13 @@
 import io.matthewnelson.kmp.configuration.extension.KmpConfigurationExtension
 import io.matthewnelson.kmp.configuration.extension.container.target.KmpConfigurationContainerDsl
 import org.gradle.api.Action
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.konan.target.HostManager
 
+// JVM only: the fork publishes only the JVM artifacts Sparrow needs (Android, iOS, JS/Wasm
+// and Kotlin/Native targets were removed).
 fun KmpConfigurationExtension.configureShared(
-    androidNamespace: String? = null,
     java9ModuleName: String? = null,
     publish: Boolean = false,
-    excludeNative: Boolean = false,
     action: Action<KmpConfigurationContainerDsl>,
 ) {
     if (publish) {
@@ -35,12 +34,6 @@ fun KmpConfigurationExtension.configureShared(
             useUniqueModuleNames = true
         }
 
-        if (androidNamespace != null) {
-            androidLibrary(namespace = androidNamespace) {
-                if (publish) target { publishLibraryVariants("release") }
-            }
-        }
-
         jvm {
             // windows always throws a fit if not using Java 11. This disables
             // compilations of module-info.java. Nobody deploys from Windows
@@ -48,43 +41,6 @@ fun KmpConfigurationExtension.configureShared(
             if (!HostManager.hostIsMingw) {
                 java9ModuleInfoName = java9ModuleName
             }
-        }
-
-        js {
-            target {
-                browser {
-                    testTask {
-                        isEnabled = false
-                    }
-                }
-                nodejs {
-                    testTask {
-                        useMocha { timeout = "30s" }
-                    }
-                }
-            }
-        }
-
-        @OptIn(ExperimentalWasmDsl::class)
-        wasmJs {
-            target {
-                browser {
-                    testTask {
-                        isEnabled = false
-                    }
-                }
-                nodejs()
-            }
-        }
-
-        if (!excludeNative) {
-            androidNativeAll()
-            iosAll()
-            linuxAll()
-            macosAll()
-            mingwAll()
-//            tvosAll()
-//            watchosAll()
         }
 
         common {

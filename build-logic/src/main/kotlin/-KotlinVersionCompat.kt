@@ -27,14 +27,5 @@ fun KmpConfigurationContainerDsl.configureKotlinVersionCompatibility() {
             apiVersion.set(KotlinVersion.KOTLIN_1_9)
             languageVersion.set(KotlinVersion.KOTLIN_1_9)
         }
-        sourceSets.configureEach {
-            if (name.startsWith("js") || name.startsWith("wasm")) {
-                languageSettings {
-                    // kmp-file & kmp-tor-common use 2.0 for js/wasmJs/jsWasmJs source sets
-                    apiVersion = KotlinVersion.KOTLIN_2_0.version
-                    languageVersion = KotlinVersion.KOTLIN_2_0.version
-                }
-            }
-        }
     }
 }

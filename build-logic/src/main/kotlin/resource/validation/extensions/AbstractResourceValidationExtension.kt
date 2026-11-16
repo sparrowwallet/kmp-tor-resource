@@ -17,12 +17,8 @@
 
 package resource.validation.extensions
 
-import com.android.build.gradle.LibraryExtension
 import org.gradle.api.Project
-import org.gradle.kotlin.dsl.getByName
-import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import resource.validation.extensions.internal.ERROR
-import resource.validation.extensions.internal.SourceSetName
 import resource.validation.extensions.internal.SourceSetName.Companion.toSourceSetName
 import resource.validation.extensions.internal.ValidationHash
 import java.io.File
@@ -49,15 +45,11 @@ sealed class AbstractResourceValidationExtension(
 
     protected abstract val hashes: Set<ValidationHash>
 
-    private val errLibAndroid = mutableSetOf<ERROR>()
     private val errLibJvm = mutableSetOf<ERROR>()
     private val errResJvm = mutableSetOf<ERROR>()
-    private val errResNative = mutableMapOf<SourceSetName, MutableSet<ERROR>>()
 
-    private var isConfiguredLibAndroid = false
     private var isConfiguredLibJvm = false
     private var isConfiguredResJvm = false
-    private var isConfiguredResNative = false
 
     private val dirModuleMock: File by lazy {
         dirProjectRoot
@@ -76,70 +68,6 @@ sealed class AbstractResourceValidationExtension(
             .resolve("reports")
             .resolve("resource-validation")
             .resolve(moduleName)
-    }
-
-    /////////////
-    // ANDROID //
-    /////////////
-
-    @Throws(IllegalStateException::class)
-    protected fun configureLibAndroidProtected() {
-        check(project.plugins.hasPlugin("com.android.library")) {
-            "The 'com.android.library' plugin is required to utilize this function"
-        }
-
-        project.extensions.getByName<LibraryExtension>("android").configureLibAndroid()
-    }
-
-    @Throws(IllegalStateException::class)
-    protected fun errorReportLibAndroidProtected(): String {
-        if (isConfiguredLibAndroid) return errLibAndroid.buildString()
-
-        val hashes = hashes.filterIsInstance<ValidationHash.LibAndroid>()
-        check(hashes.isNotEmpty()) { "No hashes to validate, no jni resources." }
-
-        return hashes.flatMapTo(LinkedHashSet(10)) { libHash ->
-            libHash.validate(dirModulePackage)
-        }.buildString()
-    }
-
-    @Throws(IllegalStateException::class)
-    private fun LibraryExtension.configureLibAndroid() {
-        if (isConfiguredLibAndroid) return
-
-        val hashes = hashes.filterIsInstance<ValidationHash.LibAndroid>()
-        check(hashes.isNotEmpty()) { "No hashes to validate, no jni resources." }
-
-        defaultConfig {
-            ndk {
-                abiFilters.add("arm64-v8a")
-                abiFilters.add("armeabi-v7a")
-                abiFilters.add("x86")
-                abiFilters.add("x86_64")
-            }
-        }
-
-        sourceSets.getByName("main") {
-            hashes.forEach { libHash ->
-                val errors = libHash.validate(dirModulePackage)
-                errLibAndroid.addAll(errors)
-            }
-
-            val jniSrcDir = if (errLibAndroid.isEmpty()) {
-                dirModulePackage
-            } else {
-                dirModuleMock
-            }.let { dir ->
-                "android".toSourceSetName()
-                    .sourceSetDir(dir)
-                    .resolve("jniLibs")
-            }
-
-            jniLibs.srcDir(jniSrcDir)
-        }
-
-        isConfiguredLibAndroid = true
-        generateReport("android", errLibAndroid)
     }
 
     ///////////////////////
@@ -228,71 +156,6 @@ sealed class AbstractResourceValidationExtension(
         return hashes.mapNotNullTo(LinkedHashSet()) { res ->
             res.validate(dirModulePackage, packageName)
         }.buildString()
-    }
-
-    @Throws(IllegalStateException::class)
-    protected fun configureNativeResourcesProtected(kmp: KotlinMultiplatformExtension) { kmp.configureResourceNative() }
-
-    @Throws(IllegalArgumentException::class, IllegalStateException::class)
-    protected fun errorReportNativeResourceProtected(sourceSet: String): String {
-        val sourceSetName = sourceSet.toSourceSetName()
-
-        if (isConfiguredResNative) {
-            return errResNative[sourceSetName]?.buildString()
-                ?: throw IllegalStateException("Unknown sourceSet[$sourceSet]")
-        }
-
-        val hashes = hashes.filterIsInstance<ValidationHash.ResourceNative>()
-        check(hashes.isNotEmpty()) { "No hashes to validate, no native resources" }
-
-        var count = 0
-        val errors = hashes.mapNotNullTo(LinkedHashSet()) { res ->
-            if (res.sourceSetName != sourceSetName) return@mapNotNullTo null
-            count++
-            res.validate(dirModulePackage, packageName)
-        }
-        check(count > 0) { "No hashes to validate for sourceSet[$sourceSet]" }
-
-        return errors.buildString()
-    }
-
-    private fun KotlinMultiplatformExtension.configureResourceNative() {
-        if (isConfiguredResNative) return
-
-        val hashes = hashes.filterIsInstance<ValidationHash.ResourceNative>()
-        check(hashes.isNotEmpty()) { "No hashes to validate, no native resources" }
-
-        // errResNative will be populated with all available
-        // source set names which will be added after validating.
-        hashes.forEach { res ->
-            var errors = errResNative[res.sourceSetName]
-
-            if (errors == null) {
-                errors = mutableSetOf()
-                errResNative[res.sourceSetName] = errors
-            }
-
-            val error = res.validate(dirModulePackage, packageName)
-            if (error != null) {
-                errors.add(error)
-            }
-        }
-
-        with(sourceSets) {
-            errResNative.forEach { (name, errors) ->
-                val srcSet = findByName(name.main) ?: return@forEach
-
-                val moduleDir = if (errors.isEmpty()) dirModulePackage else dirModuleMock
-                val kotlinSrcDir = name.sourceSetDir(moduleDir).resolve("kotlin")
-                srcSet.kotlin.srcDir(kotlinSrcDir)
-            }
-        }
-
-        isConfiguredResNative = true
-
-        errResNative.forEach { (name, errors) ->
-            generateReport(name.value, errors)
-        }
     }
 
     private fun generateReport(fileName: String, errors: Set<ERROR>) {
