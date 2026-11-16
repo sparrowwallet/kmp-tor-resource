@@ -92,3 +92,66 @@ jobs:
         run: |
           chmod +x tor-out/tor
           docker run --rm -v "$PWD/tor-out:/tor:ro" ubuntu:20.04 /tor/tor --version
+
+  # Checks the minimum OS and runs the unsigned build output, natively on each architecture.
+  macos-smoke:
+    name: smoke macos-lts-${{ matrix.arch }}
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: aarch64, runner: macos-15 }
+          - { arch: x86_64,  runner: macos-15-intel }
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Output
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-lts-${{ matrix.arch }}
+          path: tor-out
+
+      - name: Check Minimum macOS Version
+        run: ./.github/workflows/macos_min_check.sh ${{ matrix.arch }} tor-out/tor tor-out/libtor.dylib
+
+      # The build links with -no_adhoc_codesign, so the output is fully unsigned. Apple Silicon
+      # won't run unsigned arm64 code, so the arm64 test runs an ad-hoc signed copy (the
+      # Developer ID signing comes in step 4). Intel runs the output as built.
+      - name: Run tor --version
+        run: |
+          chmod +x tor-out/tor
+          dir=tor-out
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            dir=tor-adhoc
+            cp -R tor-out "$dir"
+            codesign --force -s - "$dir/libtor.dylib" "$dir/tor"
+          fi
+          "$dir/tor" --version
+
+  # Runs the unsigned build output as at runtime: tor.dll and tor.exe.local next to tor.exe.
+  windows-smoke:
+    name: smoke mingw-x86_64
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download Output
+        uses: actions/download-artifact@v4
+        with:
+          name: mingw-x86_64
+          path: tor-out
+
+      # Same content as the tor.exe.local that external/task.sh package:mingw writes.
+      - name: Run tor --version
+        shell: bash
+        run: |
+          echo "# https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-redirection#how-to-redirect-dlls-for-unpackaged-apps" > tor-out/tor.exe.local
+          ./tor-out/tor.exe --version
