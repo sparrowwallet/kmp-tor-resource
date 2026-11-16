@@ -82,7 +82,10 @@ mkdir -p external/build
 cp -R "$DIR_DL/external/build/package" external/build/
 ```
 
-- Build the jars and check they match CI's, byte for byte (same commit, same compiler and resources)
+- Build the jars and check they match CI's, byte for byte (same commit, same compiler and resources). The jars are
+  reproducible: every entry has the fixed timestamp 1980-02-01, a fixed order and a fixed mode (files `rw-r--r--`,
+  directories `rwxr-xr-x`), set in `build-logic/src/main/kotlin/publication.gradle.kts`, so the building machine's
+  file modes and umask don't matter. CI's `package` job also lists the three jars' sha256s in its run summary.
 ```
 ./gradlew verifyResourceValidation \
   :library:resource-exec-tor-gpl:jvmJar :library:resource-lib-tor-gpl:jvmJar :library:resource-geoip:jvmJar
@@ -90,8 +93,7 @@ for m in resource-exec-tor-gpl resource-lib-tor-gpl resource-geoip; do
   shasum -a 256 "library/$m/build/libs/$m-jvm-$VERSION_NAME.jar" "$DIR_DL/library/$m/build/libs/$m-jvm-$VERSION_NAME.jar"
 done
 ```
-  If they differ, stop and compare the jar contents. A difference in `META-INF/versions/9/module-info.class` only
-  points at a different JDK 11 build on the two machines.
+  If they differ, stop and compare the jars' contents (`unzip` both and `diff -r`) and entries (`unzip -Z`).
 
 - Publish (don't add `clean` here: it deletes the validation reports, and `verifyResourceValidation` then refuses)
 ```

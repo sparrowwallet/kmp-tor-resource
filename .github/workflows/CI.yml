@@ -598,12 +598,18 @@ jobs:
           fi
           exit "$fail"
 
+      # The jars are reproducible (fixed timestamps, entry order and entry modes; publication.gradle.kts), so a
+      # rebuild from this run's `package` artifact must give these jar hashes (docs/RELEASING.md).
       - name: Record Hashes
         run: |
           {
             echo "### Packaged resources"
             echo '```'
             (cd external/build/package && find . -name '*.gz' | sort | xargs sha256sum | sed 's#  \./#  #')
+            echo '```'
+            echo "### JVM jars"
+            echo '```'
+            sha256sum library/*/build/libs/*-jvm-*.jar | sed 's#  library/.*/build/libs/#  #'
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 

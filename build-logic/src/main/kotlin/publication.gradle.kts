@@ -60,7 +60,14 @@ tasks.withType<AbstractPublishToMaven>().configureEach {
     })
 }
 
+// Reproducible archives: no timestamps, a fixed entry order, and fixed entry modes. Without fixed modes, each
+// entry stores its file's mode on the building machine (e.g. CI's packaged resources were 775/664, the same
+// files downloaded from CI on a Mac 755/644), so the same commit and resources gave different jars. Nothing
+// reads the stored mode: kmp-tor's resource extraction reads entries with getResourceAsStream and sets the
+// extracted file's mode itself (mode("554") for tor and libtor), so every file is 644 and every directory 755.
 tasks.withType<AbstractArchiveTask>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+    filePermissions { unix("rw-r--r--") }
+    dirPermissions { unix("rwxr-xr-x") }
 }
