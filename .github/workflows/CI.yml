@@ -169,8 +169,7 @@ jobs:
   # No action runs while the keychain exists: artifacts are downloaded before the keychain is created,
   # and uploaded after it's deleted. Actions are pinned by commit SHA.
   #
-  # Runs on Intel: codesign and notarytool sign the arm64 binaries the same way there, and GitHub's
-  # macOS arm64 runners repeatedly weren't available (jobs cancelled after 15 minutes unassigned).
+  # Runs on Intel: codesign and notarytool sign the arm64 binaries the same way there.
   # The signed arm64 run is the separate macos-signed-arm64 job, so it doesn't gate the signatures.
   sign-macos:
     name: sign macos-lts
@@ -231,7 +230,7 @@ jobs:
           fi
           echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
-      # --force replaces the linker's ad-hoc signature on the arm64 tor (next step 3).
+      # --force replaces the linker's ad-hoc signature on the arm64 tor.
       # libtor.dylib and tor must be signed by the same team: hardened runtime's library validation.
       - name: Sign
         env:
@@ -300,8 +299,7 @@ jobs:
           if-no-files-found: ignore
 
   # No secrets. Runs the signed arm64 output as built (no ad-hoc copy) on Apple Silicon: library
-  # validation between the signed tor and libtor.dylib. Doesn't gate the signatures; if no arm64
-  # runner is available, rerun this job on its own later.
+  # validation between the signed tor and libtor.dylib. Doesn't gate the signatures.
   macos-signed-arm64:
     name: smoke signed macos-lts-aarch64
     needs: sign-macos
@@ -407,7 +405,7 @@ jobs:
           path: external/codesign/tor-gpl/macos-lts/
           if-no-files-found: error
 
-  # No secrets. Applies the committed Windows detached signatures (made locally with Jsign; next step 5)
+  # No secrets. Applies the committed Windows detached signatures (made locally with Jsign)
   # to this run's unsigned MinGW output. diff-cli refuses a signature whose recorded unsigned hash
   # doesn't match, so this also checks the signatures were made from the bytes CI builds.
   # Skipped (with a notice) while no signatures are committed.

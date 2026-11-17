@@ -27,8 +27,7 @@ The containers are built from the Dockerfiles in [build-env](../build-env) (copi
 | `macos-lts` aarch64, x86_64  | osxcross, macOS SDK 12.3                    | macOS 11 (aarch64), 10.9 (x86_64) |
 | `mingw` x86_64      | mingw-w64 (Debian 12)                       |                      |
 
-The macOS images contain the macOS SDK, which Apple's licence doesn't appear to allow redistributing, so they
-(and the SDK mirror) are private. The Linux and MinGW images are public.
+The macOS images contain the macOS SDK, which isn't redistributed, so they (and the SDK mirror) are private. The Linux and MinGW images are public.
 
 ### Building
 

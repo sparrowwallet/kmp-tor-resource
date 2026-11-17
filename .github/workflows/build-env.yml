@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  # Private package holding only the macOS SDK tarball (Apple's licence doesn't appear to allow redistributing it).
+  # Private package holding only the macOS SDK tarball (the SDK isn't redistributed).
   # Its sha256 is checked in build-env/src/base/darwin/macos/Dockerfile.
   MACOS_SDK_IMAGE: ghcr.io/sparrowwallet/build-env.macos-sdk:12.3
   MACOS_SDK_FILE: MacOSX12.3.sdk.tar.gz

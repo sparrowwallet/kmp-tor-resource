@@ -15,7 +15,7 @@
 
 # Sourced by external/task.sh for all 'sign:*' tasks
 
-# Creates the detached signatures for binaries signed elsewhere (e.g. with Jsign and a YubiKey).
+# Creates the detached signatures for binaries signed elsewhere (e.g. with Jsign).
 #
 # Compares each signed file in dir [2] with its unsigned build output in build/out/$dirname_out/mingw/[1]/,
 # writes codesign/$dirname_out/mingw/[1]/<file>.signature, and checks that the signature turns the unsigned

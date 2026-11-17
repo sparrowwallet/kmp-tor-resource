@@ -24,13 +24,12 @@
    - macOS (signed and notarized in CI with Sparrow's Developer ID):
      1. Run the CI workflow by hand (`workflow_dispatch`) with `sign_macos` ticked.
      2. Unpack its `macos-lts-signatures` artifact into `external/codesign/tor-gpl/macos-lts/`, and commit it.
-   - Windows (signed locally with Jsign and a YubiKey; imported on the Linux machine, which has the
-     unsigned build from step 4):
+   - Windows (signed locally with Jsign; imported on the machine that has the unsigned build from step 4):
      1. Get the unsigned `tor.exe` and `tor.dll`: the `mingw-x86_64` artifact of a CI run of the commit being
         released, or `external/build/out/tor-gpl/mingw/x86_64/` from step 4. They're byte-identical.
      2. Sign both files with Jsign, with a timestamp, embedding the full certificate chain (`--certfile` with
-        the leaf certificate and the SSL.com intermediate). Sign fresh unsigned copies, never already-signed files.
-     3. Copy the two signed files into a directory of their own on the Linux machine, and import them:
+        the leaf and intermediate certificates). Sign fresh unsigned copies, never already-signed files.
+     3. Copy the two signed files into a directory of their own on that machine, and import them:
         ```shell
         ./external/task.sh sign:mingw:import /path/to/dir/with/signed/files
         ```
@@ -40,7 +39,7 @@
         CI-built output, check both Authenticode signatures are valid and timestamped on Windows, and run
         the signed `tor.exe`.
 
-6) Package compilations (on the Linux machine, after the signatures from step 5 are in place)
+6) Package compilations (on the machine with the build from step 4, after the signatures from step 5 are in place)
    ```shell
    ./external/task.sh package:all
    ```

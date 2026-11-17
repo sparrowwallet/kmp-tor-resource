@@ -2,11 +2,11 @@
 
 Releases are published to Maven Central as `com.sparrowwallet:resource-exec-tor-gpl` (with `resource-lib-tor-gpl`
 and `resource-geoip`), JVM only. CI builds, signs (macOS), packages and validates the release commit. Publishing
-runs on the Mac, from CI's packaged resources: the Mac has no Docker, so it doesn't package itself.
+runs on macOS, from CI's packaged resources, so the publishing machine doesn't need Docker to package.
 
 Why this is safe: CI's `package` job packages the five targets with the committed detached signatures, and fails
 unless every packaged resource matches its validation hash in `build-logic/src/main/kotlin/resource/validation/`.
-On the Mac, `verifyResourceValidation` runs before any publish task and fails unless the same hashes match. A
+When publishing, `verifyResourceValidation` runs before any publish task and fails unless the same hashes match. A
 mismatch would otherwise make Gradle silently build with the mock resources from `mock-resources/`.
 
 ### Before the release
@@ -17,25 +17,21 @@ mismatch would otherwise make Gradle silently build with the mock resources from
 
 ### One-time setup (macOS)
 
-- A JDK between 17 and 24 to run Gradle, and JDK 11 installed (the `module-info` compile uses a JDK 11 toolchain,
-  found under `/Library/Java/JavaVirtualMachines`)
+- A JDK between 17 and 24 to run Gradle (Gradle 8.14 doesn't run on JDK 25), and JDK 11 installed (the
+  `module-info` compile uses a JDK 11 toolchain, which Gradle finds among the installed JDKs)
 ```
 java --version
-/usr/libexec/java_home -V
 ```
 
-- `gh` logged in, to download the CI artifact
+- `gh` logged in, to download the CI artifact, with this fork as the default repository (the clone may also have
+  upstream as a remote, and the `gh run` commands below then refuse to guess)
 ```
 gh auth status
+gh repo set-default sparrowwallet/kmp-tor-resource
 ```
 
-- `~/.gradle/gradle.properties` holds the Maven Central Portal credentials and the GPG signing config used for
-  Sparrow's other `com.sparrowwallet` artifacts
-```
-mavenCentralUsername=<token username>
-mavenCentralPassword=<token password>
-signing.keyId=...
-```
+- Maven Central Portal credentials and a GPG signing key, configured as the publishing plugin expects (see the
+  [Gradle Maven Publish Plugin](https://vanniktech.github.io/gradle-maven-publish-plugin/central/) documentation)
 
 ### Release commit
 
@@ -67,9 +63,10 @@ RUN_ID="<run id>"
 
 ### Publish (macOS)
 
-- If GPG asks for a YubiKey PIN, sign something first: the PIN prompt and the Gradle build don't mix
+- Optionally, check signing works before anything is uploaded (it writes `.asc` files locally)
 ```
-echo test | gpg --sign --armor > /dev/null
+./gradlew :library:resource-geoip:signJvmPublication
+ls library/resource-geoip/build/libs/*.asc
 ```
 
 - Start clean, then download CI's packaged resources and jars, and put the resources in place
@@ -122,5 +119,11 @@ git push
 ```
 
 - Wait for the release on [Maven Central](https://repo1.maven.org/maven2/com/sparrowwallet/resource-exec-tor-gpl/)
+  then check the released `-jvm` jars match CI's run summary
+```
+for m in resource-exec-tor-gpl resource-lib-tor-gpl resource-geoip; do
+  curl -s "https://repo1.maven.org/maven2/com/sparrowwallet/$m-jvm/$VERSION_NAME/$m-jvm-$VERSION_NAME.jar" | shasum -a 256
+done
+```
 
 - Draft a GitHub release for the tag, with the changelog
